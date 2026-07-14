@@ -14,6 +14,29 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_DATABASE_PATH = ROOT_DIR / "data" / "conclusion.sqlite3"
 DATABASE_PATH_ENV = "CONCLUSION_DATABASE_PATH"
 BUSY_TIMEOUT_MS = 5_000
+UPDATE_FIELDS = (
+    "title",
+    "question",
+    "conclusion",
+    "reason",
+    "tradeoffs",
+    "conditions",
+    "category",
+    "confidence",
+)
+
+
+class ConclusionUpdateConflictError(Exception):
+    """Raised when an update uses a stale updated_at value."""
+
+    def __init__(self, current_updated_at: str) -> None:
+        super().__init__("Conclusion was modified by another writer")
+        self.current_updated_at = current_updated_at
+
+
+def utc_timestamp() -> str:
+    """Return a UTC timestamp precise enough for optimistic concurrency checks."""
+    return datetime.now(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
 
 
 def resolve_database_path(database_path: str | Path | None = None) -> Path:
@@ -129,7 +152,7 @@ def create_conclusion(
     values: Mapping[str, Any],
 ) -> dict[str, Any]:
     """Insert and return one Conclusion inside the caller's transaction."""
-    timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    timestamp = utc_timestamp()
     parameters = {
         "title": values["title"],
         "question": values["question"],
@@ -260,3 +283,50 @@ def get_conclusion(
         (conclusion_id,),
     ).fetchone()
     return _records_with_tags(connection, [row])[0] if row is not None else None
+
+
+def update_conclusion(
+    connection: sqlite3.Connection,
+    conclusion_id: int,
+    values: Mapping[str, Any],
+    *,
+    expected_updated_at: str,
+) -> dict[str, Any] | None:
+    """Partially update and return a Conclusion with optimistic concurrency."""
+    parameters = {field: values[field] for field in UPDATE_FIELDS if field in values}
+    parameters.update(
+        {
+            "id": conclusion_id,
+            "expected_updated_at": expected_updated_at,
+            "updated_at": utc_timestamp(),
+        }
+    )
+    assignments = [f"{field} = :{field}" for field in parameters if field in UPDATE_FIELDS]
+    assignments.append("updated_at = :updated_at")
+    cursor = connection.execute(
+        f"""
+        UPDATE conclusions
+        SET {", ".join(assignments)}
+        WHERE id = :id AND updated_at = :expected_updated_at
+        """,
+        parameters,
+    )
+    if cursor.rowcount == 0:
+        current = connection.execute(
+            "SELECT updated_at FROM conclusions WHERE id = ?",
+            (conclusion_id,),
+        ).fetchone()
+        if current is None:
+            return None
+        raise ConclusionUpdateConflictError(current["updated_at"])
+
+    if "tags" in values:
+        _replace_conclusion_tags(connection, conclusion_id, values["tags"])
+
+    row = connection.execute(
+        "SELECT * FROM conclusions WHERE id = ?",
+        (conclusion_id,),
+    ).fetchone()
+    if row is None:  # pragma: no cover - the successful update guarantees the row
+        raise RuntimeError("Updated Conclusion could not be loaded")
+    return _records_with_tags(connection, [row])[0]

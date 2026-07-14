@@ -66,10 +66,12 @@ Available  GET    /api/health
 Available  POST   /api/conclusions
 Available  GET    /api/conclusions
 Available  GET    /api/conclusions/{id}
-Planned    PATCH  /api/conclusions/{id}
+Available  PATCH  /api/conclusions/{id}
 Planned    DELETE /api/conclusions/{id}
 Planned    GET    /api/tags
 ```
+
+`PATCH` 接受部分字段，但必须同时提交客户端最后读取到的 `expectedUpdatedAt`。如果记录已被网页、MCP 或其他写入者修改，接口返回 `409 Conflict` 和最新的 `currentUpdatedAt`，避免静默覆盖。
 
 叙述字段保存 Markdown 原文；界面仅支持渲染 Markdown 中的公网 `https://` 图片 URL，Conclusion 不提供图片上传或本地图片托管。列表接口将支持关键词、分类、标签和结果上限参数。具体请求/响应契约在对应功能实现时用测试固定，不提前设计复杂 API。
 

@@ -9,8 +9,16 @@ from fastapi import FastAPI, HTTPException, Query, status
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.db import connect, create_conclusion, get_conclusion, init_db, list_conclusions
-from app.schemas import ConclusionCreate, ConclusionList, ConclusionRecord
+from app.db import (
+    ConclusionUpdateConflictError,
+    connect,
+    create_conclusion,
+    get_conclusion,
+    init_db,
+    list_conclusions,
+    update_conclusion,
+)
+from app.schemas import ConclusionCreate, ConclusionList, ConclusionRecord, ConclusionUpdate
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -68,6 +76,39 @@ def create_app(
     def get_conclusion_by_id(conclusion_id: int) -> dict[str, object]:
         with connect(database_path, read_only=True) as connection:
             record = get_conclusion(connection, conclusion_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail="Conclusion not found")
+        return record
+
+    @app.patch(
+        "/api/conclusions/{conclusion_id}",
+        response_model=ConclusionRecord,
+        tags=["conclusions"],
+    )
+    def patch_conclusion(
+        conclusion_id: int,
+        payload: ConclusionUpdate,
+    ) -> dict[str, object]:
+        values = payload.model_dump(
+            exclude_unset=True,
+            exclude={"expected_updated_at"},
+        )
+        try:
+            with connect(database_path) as connection:
+                record = update_conclusion(
+                    connection,
+                    conclusion_id,
+                    values,
+                    expected_updated_at=payload.expected_updated_at,
+                )
+        except ConclusionUpdateConflictError as error:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "message": str(error),
+                    "currentUpdatedAt": error.current_updated_at,
+                },
+            ) from error
         if record is None:
             raise HTTPException(status_code=404, detail="Conclusion not found")
         return record
