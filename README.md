@@ -2,7 +2,7 @@
 
 Conclusion 是一个个人决策知识库，用来保存“已经想清楚的最终结论”。当自己或 AI 再次遇到相似问题时，可以直接复用已有决定、理由、取舍和适用条件，而不是从聊天记录中重新寻找或再次分析。
 
-> 当前状态：MVP 设计和开发准备阶段。仓库已有数据模型、FengDock 集成约定和开发部署 Cookbook，应用代码与 UI 尚未开始实现。
+> 当前状态：后端骨架已经建立并提供健康检查；数据库、CRUD 和 UI 尚未实现。
 
 ## Screenshots
 
@@ -99,6 +99,27 @@ data/conclusion.sqlite3
 
 SQLite 数据库、`.env`、备份、缓存和构建产物均不得提交 Git。README 截图和未来的公开演示只能使用明确构造的假数据。
 
+## Quick Start
+
+安装依赖并启动当前后端：
+
+```bash
+uv sync --frozen
+uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 8006
+```
+
+验证健康检查：
+
+```bash
+curl -fsS http://127.0.0.1:8006/api/health
+```
+
+预期响应：
+
+```json
+{"ok": true}
+```
+
 ## 后续 MCP
 
 MCP 由 FengDock 的统一 OAuth 和只读 MCP 服务对外提供：
@@ -120,7 +141,11 @@ Conclusion 的 `app/db.py` 提供可复用读取函数；FengDock 像读取 `ven
 
 ## Development
 
-仓库目前尚无可运行代码。后端健康检查和前端骨架分别完成后，README 会加入经过验证的 Quick Start 命令。
+运行当前测试：
+
+```bash
+uv run python -m pytest
+```
 
 - [COOKBOOK.md](COOKBOOK.md)：本地开发、测试、截图、提交、FengDock 接入、部署、验证和回滚
 - [docs/roadmap.md](docs/roadmap.md)：MVP 小步功能顺序
