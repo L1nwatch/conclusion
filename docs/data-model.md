@@ -12,8 +12,8 @@
 | `tradeoffs` | `TEXT` | MVP 使用普通文本，默认空字符串 |
 | `category` | `TEXT` | 必填；先允许自由输入，不做固定枚举 |
 | `confidence` | `TEXT` | 必须为 `High`、`Medium`、`Low` 之一 |
-| `created_at` | `DATETIME` | UTC，创建时写入 |
-| `updated_at` | `DATETIME` | UTC，创建及每次修改时写入 |
+| `created_at` | `TEXT` | UTC ISO 8601，创建时写入 |
+| `updated_at` | `TEXT` | UTC ISO 8601，创建及每次修改时写入 |
 
 API 输出可将时间字段序列化为 `createdAt` 和 `updatedAt`，数据库与 Python 内部保持 `snake_case`。
 
@@ -40,4 +40,3 @@ MVP 关键词搜索只匹配：
 ## 删除语义
 
 MVP 使用硬删除。删除 Conclusion 时级联删除 `conclusion_tags` 关联；不自动删除已经没有关联的标签，标签清理由后续独立功能处理。
-
