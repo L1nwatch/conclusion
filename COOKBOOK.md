@@ -131,6 +131,7 @@ uv run python -m compileall app
 
 ```bash
 cd /path/to/conclusion/frontend
+npm test
 npm run build
 ```
 
@@ -163,7 +164,7 @@ uv run python scripts/capture_screenshots.py \
   --output-dir screenshots
 ```
 
-截图建议固定为 `1440x900` viewport，并等待页面和 API 数据完成加载后再捕获。不要手工从生产站点截图，也不要把真实投资、健康、购物或生活决策写入 demo seed。
+截图固定为 `1440x900` viewport，并等待页面和 API 数据完成加载后再捕获。脚本还会使用 `390x844` viewport 检查新增页面是否出现横向溢出。不要手工从生产站点截图，也不要把真实投资、健康、购物或生活决策写入 demo seed。
 
 ## 小步开发和提交
 

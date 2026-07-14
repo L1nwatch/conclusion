@@ -7,7 +7,7 @@
 ```text
 list.png
 detail.png
-create.png                 # 新增页面实现后加入
+create.png
 search-and-tags.png        # 搜索和标签筛选实现后加入
 ```
 

@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getConclusion } from '../api'
+import MarkdownContent from '../components/MarkdownContent.vue'
 import type { ConclusionRecord } from '../types'
 
 const route = useRoute()
@@ -37,9 +38,18 @@ onMounted(load)
 
 <template>
   <main class="detail-shell">
-    <button class="back-link" type="button" @click="router.push({ name: 'list' })">
-      ← 返回结论库
-    </button>
+    <div class="detail-navigation">
+      <button class="back-link" type="button" @click="router.push({ name: 'list' })">
+        ← 返回结论库
+      </button>
+      <el-button
+        v-if="record"
+        plain
+        @click="router.push({ name: 'edit', params: { id: record.id } })"
+      >
+        编辑
+      </el-button>
+    </div>
 
     <div v-if="loading" class="detail-card state-panel">
       <el-skeleton :rows="8" animated />
@@ -61,6 +71,10 @@ onMounted(load)
         </span>
       </div>
 
+      <div v-if="record.tags.length" class="detail-tags" aria-label="标签">
+        <span v-for="tag in record.tags" :key="tag">#{{ tag }}</span>
+      </div>
+
       <h1>{{ record.title }}</h1>
 
       <section class="detail-section question-section">
@@ -70,19 +84,30 @@ onMounted(load)
 
       <section class="detail-section conclusion-section">
         <p class="section-kicker">FINAL CONCLUSION</p>
-        <p>{{ record.conclusion }}</p>
+        <MarkdownContent :content="record.conclusion" preview-id="conclusion-preview" />
       </section>
 
       <div class="detail-columns">
         <section class="detail-section">
           <p class="section-kicker">WHY</p>
-          <p>{{ record.reason }}</p>
+          <MarkdownContent :content="record.reason" preview-id="reason-preview" />
         </section>
         <section class="detail-section">
           <p class="section-kicker">TRADEOFFS</p>
-          <p>{{ record.tradeoffs || '没有额外记录的取舍。' }}</p>
+          <MarkdownContent
+            :content="record.tradeoffs || '没有额外记录的取舍。'"
+            preview-id="tradeoffs-preview"
+          />
         </section>
       </div>
+
+      <section class="detail-section">
+        <p class="section-kicker">CONDITIONS</p>
+        <MarkdownContent
+          :content="record.conditions || '没有额外记录的适用条件。'"
+          preview-id="conditions-preview"
+        />
+      </section>
 
       <footer class="detail-footer">
         <span>创建于 {{ formatDate(record.createdAt) }}</span>
@@ -91,4 +116,3 @@ onMounted(load)
     </article>
   </main>
 </template>
-

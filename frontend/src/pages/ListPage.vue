@@ -40,6 +40,16 @@ function formatDate(value: string) {
   }).format(new Date(value))
 }
 
+function markdownExcerpt(value: string) {
+  return value
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/[*_`>~-]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 onMounted(load)
 </script>
 
@@ -72,9 +82,14 @@ onMounted(load)
           <p class="section-kicker">LIBRARY</p>
           <h2 id="library-title">结论库</h2>
         </div>
-        <el-button class="refresh-button" plain :loading="loading" @click="load">
-          重新读取
-        </el-button>
+        <div class="section-actions">
+          <el-button class="refresh-button" plain :loading="loading" @click="load">
+            重新读取
+          </el-button>
+          <el-button type="primary" @click="router.push({ name: 'create' })">
+            新增 Conclusion
+          </el-button>
+        </div>
       </div>
 
       <div v-if="loading" class="state-panel" data-testid="loading-state">
@@ -109,7 +124,7 @@ onMounted(load)
             <span class="updated-at">{{ formatDate(item.updatedAt) }}</span>
           </div>
           <h3>{{ item.title }}</h3>
-          <p class="card-conclusion">{{ item.conclusion }}</p>
+          <p class="card-conclusion">{{ markdownExcerpt(item.conclusion) }}</p>
           <div class="card-footer">
             <span class="confidence-dot" :data-confidence="item.confidence" />
             <span>{{ confidenceLabel[item.confidence] }}</span>
@@ -120,4 +135,3 @@ onMounted(load)
     </section>
   </main>
 </template>
-

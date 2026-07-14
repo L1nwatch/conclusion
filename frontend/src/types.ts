@@ -15,6 +15,12 @@ export interface ConclusionRecord {
   updatedAt: string
 }
 
+export type ConclusionInput = Omit<ConclusionRecord, 'id' | 'createdAt' | 'updatedAt'>
+
+export type ConclusionUpdateInput = Partial<ConclusionInput> & {
+  expectedUpdatedAt: string
+}
+
 export interface ConclusionListResponse {
   count: number
   returned: number

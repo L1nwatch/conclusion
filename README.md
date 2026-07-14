@@ -2,7 +2,7 @@
 
 Conclusion 是一个个人决策知识库，用来保存“已经想清楚的最终结论”。当自己或 AI 再次遇到相似问题时，可以直接复用已有决定、理由、取舍和适用条件，而不是从聊天记录中重新寻找或再次分析。
 
-> 当前状态：后端已支持新增、列表和详情，并提供 Vue 列表/详情界面；编辑、删除、标签和搜索尚未实现。
+> 当前状态：后端已支持新增、列表、详情和并发安全更新；Vue 界面已支持列表、详情、Markdown 新增和编辑。删除、搜索和筛选尚未实现。
 
 ## Screenshots
 
@@ -15,6 +15,10 @@ Conclusion 是一个个人决策知识库，用来保存“已经想清楚的最
 ### Conclusion 详情
 
 ![Conclusion 详情](screenshots/detail.png)
+
+### 新增 Conclusion
+
+![新增 Conclusion](screenshots/create.png)
 
 截图生成方式和后续页面的命名约定见 [`screenshots/`](screenshots/README.md)。任何真实投资、健康或生活决策数据都不得出现在 README 截图中。
 

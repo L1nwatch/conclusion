@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PAGES = [
     ("list", "/", "[data-testid='conclusion-list']"),
     ("detail", "/conclusions/1", "[data-testid='conclusion-detail']"),
+    ("create", "/conclusions/new", "[data-testid='conclusion-form']"),
 ]
 
 
@@ -29,6 +30,20 @@ def capture(base_url: str, output_dir: Path) -> None:
                 page.goto(f"{base_url.rstrip('/')}{path}", wait_until="networkidle")
                 page.locator(ready_selector).wait_for(state="visible")
                 page.screenshot(path=output_dir / f"{name}.png", full_page=False)
+
+            page.set_viewport_size({"width": 390, "height": 844})
+            page.goto(f"{base_url.rstrip('/')}/conclusions/new", wait_until="networkidle")
+            page.locator("[data-testid='conclusion-form']").wait_for(state="visible")
+            dimensions = page.evaluate(
+                """
+                () => ({
+                    viewportWidth: document.documentElement.clientWidth,
+                    pageWidth: document.documentElement.scrollWidth,
+                })
+                """
+            )
+            if dimensions["pageWidth"] > dimensions["viewportWidth"]:
+                raise RuntimeError(f"Mobile form overflows horizontally: {dimensions}")
         finally:
             browser.close()
 
@@ -45,4 +60,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
