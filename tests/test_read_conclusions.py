@@ -9,14 +9,16 @@ from fastapi.testclient import TestClient
 from app.main import create_app
 
 
-def payload(title: str, category: str = "Life") -> dict[str, str]:
+def payload(title: str, category: str = "Life") -> dict[str, object]:
     return {
         "title": title,
         "question": f"Question for {title}",
         "conclusion": f"Conclusion for {title}",
         "reason": f"Reason for {title}",
         "tradeoffs": f"Tradeoffs for {title}",
+        "conditions": f"Conditions for {title}",
         "category": category,
+        "tags": [category, "Decision"],
         "confidence": "High",
     }
 
@@ -73,4 +75,3 @@ def test_get_conclusion_returns_404_for_missing_record(tmp_path: Path) -> None:
 
     assert response.status_code == 404
     assert response.json() == {"detail": "Conclusion not found"}
-

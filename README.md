@@ -44,10 +44,11 @@ Conclusion 是一个个人决策知识库，用来保存“已经想清楚的最
 | --- | --- |
 | `id` | 稳定的唯一标识 |
 | `title` | 标题 |
-| `question` | 原始问题 |
-| `conclusion` | 最终结论 |
-| `reason` | 主要原因 |
-| `tradeoffs` | 接受的缺点或放弃的方案 |
+| `question` | 原始问题，普通文本 |
+| `conclusion` | 最终结论，支持 GFM Markdown |
+| `reason` | 主要原因，支持 GFM Markdown |
+| `tradeoffs` | 接受的缺点或放弃的方案，支持 GFM Markdown |
+| `conditions` | 结论适用和需要重新评估的条件，支持 GFM Markdown |
 | `category` | 分类，如投资、健康、生活、学习 |
 | `tags` | 标签集合 |
 | `confidence` | `High`、`Medium` 或 `Low` |
@@ -70,7 +71,7 @@ Planned    DELETE /api/conclusions/{id}
 Planned    GET    /api/tags
 ```
 
-列表接口将支持关键词、分类、标签和结果上限参数。具体请求/响应契约在对应功能实现时用测试固定，不提前设计复杂 API。
+叙述字段保存 Markdown 原文；界面仅支持渲染 Markdown 中的公网 `https://` 图片 URL，Conclusion 不提供图片上传或本地图片托管。列表接口将支持关键词、分类、标签和结果上限参数。具体请求/响应契约在对应功能实现时用测试固定，不提前设计复杂 API。
 
 ## 架构
 
@@ -136,7 +137,9 @@ curl -fsS -X POST http://127.0.0.1:8006/api/conclusions \
     "conclusion": "暂不更换，等现有书桌明显限制使用时再评估。",
     "reason": "当前改善有限，不值得立即占用预算和空间。",
     "tradeoffs": "暂时接受高度和收纳不够理想。",
+    "conditions": "现有书桌影响坐姿或设备摆放时重新评估。",
     "category": "购物",
+    "tags": ["家具", "延迟购买"],
     "confidence": "Medium"
   }'
 ```

@@ -7,7 +7,9 @@ export interface ConclusionRecord {
   conclusion: string
   reason: string
   tradeoffs: string
+  conditions: string
   category: string
+  tags: string[]
   confidence: Confidence
   createdAt: string
   updatedAt: string
@@ -18,4 +20,3 @@ export interface ConclusionListResponse {
   returned: number
   items: ConclusionRecord[]
 }
-

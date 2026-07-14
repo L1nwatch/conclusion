@@ -15,10 +15,12 @@ from app.main import create_app
 VALID_PAYLOAD = {
     "title": "  Buy a standing desk  ",
     "question": " Should I replace my current desk? ",
-    "conclusion": " Wait until the current desk becomes limiting. ",
-    "reason": " The current setup is still adequate. ",
+    "conclusion": " Wait until the current desk becomes limiting.\n\n[Reference](https://example.com) ",
+    "reason": " The current setup is still **adequate**. ",
     "tradeoffs": " Accept less flexibility for now. ",
+    "conditions": " Reconsider when the desk becomes unstable. ",
     "category": " Shopping ",
+    "tags": [" Furniture ", "Ergonomics", "furniture"],
     "confidence": "Medium",
 }
 
@@ -34,10 +36,15 @@ def test_create_conclusion_returns_and_persists_record(tmp_path: Path) -> None:
     assert body["id"] == 1
     assert body["title"] == "Buy a standing desk"
     assert body["question"] == "Should I replace my current desk?"
-    assert body["conclusion"] == "Wait until the current desk becomes limiting."
-    assert body["reason"] == "The current setup is still adequate."
+    assert body["conclusion"] == (
+        "Wait until the current desk becomes limiting.\n\n"
+        "[Reference](https://example.com)"
+    )
+    assert body["reason"] == "The current setup is still **adequate**."
     assert body["tradeoffs"] == "Accept less flexibility for now."
+    assert body["conditions"] == "Reconsider when the desk becomes unstable."
     assert body["category"] == "Shopping"
+    assert body["tags"] == ["Furniture", "Ergonomics"]
     assert body["confidence"] == "Medium"
     assert body["createdAt"] == body["updatedAt"]
     assert datetime.fromisoformat(body["createdAt"]).utcoffset().total_seconds() == 0
@@ -52,22 +59,40 @@ def test_create_conclusion_returns_and_persists_record(tmp_path: Path) -> None:
         "conclusion": body["conclusion"],
         "reason": body["reason"],
         "tradeoffs": body["tradeoffs"],
+        "conditions": body["conditions"],
         "category": body["category"],
         "confidence": body["confidence"],
         "created_at": body["createdAt"],
         "updated_at": body["updatedAt"],
     }
 
+    with connect(database_path, read_only=True) as connection:
+        tags = connection.execute(
+            """
+            SELECT tags.name
+            FROM conclusion_tags
+            JOIN tags ON tags.id = conclusion_tags.tag_id
+            WHERE conclusion_tags.conclusion_id = 1
+            ORDER BY conclusion_tags.position
+            """
+        ).fetchall()
 
-def test_create_conclusion_defaults_tradeoffs_to_empty_text(tmp_path: Path) -> None:
+    assert [tag["name"] for tag in tags] == body["tags"]
+
+
+def test_create_conclusion_defaults_optional_content_and_tags(tmp_path: Path) -> None:
     payload = dict(VALID_PAYLOAD)
     payload.pop("tradeoffs")
+    payload.pop("conditions")
+    payload.pop("tags")
 
     with TestClient(create_app(tmp_path / "conclusion.sqlite3")) as client:
         response = client.post("/api/conclusions", json=payload)
 
     assert response.status_code == 201
     assert response.json()["tradeoffs"] == ""
+    assert response.json()["conditions"] == ""
+    assert response.json()["tags"] == []
 
 
 @pytest.mark.parametrize(
@@ -93,3 +118,20 @@ def test_create_conclusion_rejects_unknown_confidence(tmp_path: Path) -> None:
 
     assert response.status_code == 422
 
+
+@pytest.mark.parametrize(
+    "tags",
+    [
+        ["valid", "   "],
+        ["x" * 51],
+        [f"tag-{index}" for index in range(21)],
+    ],
+)
+def test_create_conclusion_rejects_invalid_tags(tmp_path: Path, tags: list[str]) -> None:
+    payload = dict(VALID_PAYLOAD)
+    payload["tags"] = tags
+
+    with TestClient(create_app(tmp_path / "conclusion.sqlite3")) as client:
+        response = client.post("/api/conclusions", json=payload)
+
+    assert response.status_code == 422

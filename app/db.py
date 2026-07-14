@@ -78,6 +78,7 @@ def init_db(connection: sqlite3.Connection) -> None:
                 length(trim(reason, ' ' || char(9) || char(10) || char(13))) > 0
             ),
             tradeoffs TEXT NOT NULL DEFAULT '',
+            conditions TEXT NOT NULL DEFAULT '',
             category TEXT NOT NULL CHECK (
                 length(trim(category, ' ' || char(9) || char(10) || char(13))) > 0
             ),
@@ -91,14 +92,41 @@ def init_db(connection: sqlite3.Connection) -> None:
 
         CREATE INDEX IF NOT EXISTS idx_conclusions_updated_at
         ON conclusions(updated_at DESC);
+
+        CREATE TABLE IF NOT EXISTS tags (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL CHECK (
+                length(trim(name, ' ' || char(9) || char(10) || char(13))) > 0
+            ),
+            normalized_name TEXT NOT NULL UNIQUE
+        );
+
+        CREATE TABLE IF NOT EXISTS conclusion_tags (
+            conclusion_id INTEGER NOT NULL REFERENCES conclusions(id) ON DELETE CASCADE,
+            tag_id INTEGER NOT NULL REFERENCES tags(id),
+            position INTEGER NOT NULL CHECK (position >= 0),
+            PRIMARY KEY (conclusion_id, tag_id),
+            UNIQUE (conclusion_id, position)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_conclusion_tags_tag_id
+        ON conclusion_tags(tag_id);
         """
     )
+
+    columns = {
+        row["name"] for row in connection.execute("PRAGMA table_info(conclusions)").fetchall()
+    }
+    if "conditions" not in columns:
+        connection.execute(
+            "ALTER TABLE conclusions ADD COLUMN conditions TEXT NOT NULL DEFAULT ''"
+        )
     connection.commit()
 
 
 def create_conclusion(
     connection: sqlite3.Connection,
-    values: Mapping[str, str],
+    values: Mapping[str, Any],
 ) -> dict[str, Any]:
     """Insert and return one Conclusion inside the caller's transaction."""
     timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
@@ -108,6 +136,7 @@ def create_conclusion(
         "conclusion": values["conclusion"],
         "reason": values["reason"],
         "tradeoffs": values.get("tradeoffs", ""),
+        "conditions": values.get("conditions", ""),
         "category": values["category"],
         "confidence": values["confidence"],
         "created_at": timestamp,
@@ -116,11 +145,11 @@ def create_conclusion(
     cursor = connection.execute(
         """
         INSERT INTO conclusions (
-            title, question, conclusion, reason, tradeoffs,
+            title, question, conclusion, reason, tradeoffs, conditions,
             category, confidence, created_at, updated_at
         )
         VALUES (
-            :title, :question, :conclusion, :reason, :tradeoffs,
+            :title, :question, :conclusion, :reason, :tradeoffs, :conditions,
             :category, :confidence, :created_at, :updated_at
         )
         """,
@@ -132,7 +161,70 @@ def create_conclusion(
     ).fetchone()
     if row is None:  # pragma: no cover - SQLite guarantees lastrowid for this insert
         raise RuntimeError("Created Conclusion could not be loaded")
-    return dict(row)
+    conclusion_id = int(row["id"])
+    _replace_conclusion_tags(connection, conclusion_id, values.get("tags", []))
+    return _records_with_tags(connection, [row])[0]
+
+
+def _replace_conclusion_tags(
+    connection: sqlite3.Connection,
+    conclusion_id: int,
+    tags: list[str],
+) -> None:
+    """Replace one Conclusion's ordered tags inside the caller's transaction."""
+    connection.execute("DELETE FROM conclusion_tags WHERE conclusion_id = ?", (conclusion_id,))
+    for position, name in enumerate(tags):
+        normalized_name = name.casefold()
+        connection.execute(
+            """
+            INSERT INTO tags (name, normalized_name)
+            VALUES (?, ?)
+            ON CONFLICT(normalized_name) DO NOTHING
+            """,
+            (name, normalized_name),
+        )
+        tag = connection.execute(
+            "SELECT id FROM tags WHERE normalized_name = ?",
+            (normalized_name,),
+        ).fetchone()
+        if tag is None:  # pragma: no cover - insert/select invariant
+            raise RuntimeError("Tag could not be loaded")
+        connection.execute(
+            """
+            INSERT INTO conclusion_tags (conclusion_id, tag_id, position)
+            VALUES (?, ?, ?)
+            """,
+            (conclusion_id, tag["id"], position),
+        )
+
+
+def _records_with_tags(
+    connection: sqlite3.Connection,
+    rows: list[sqlite3.Row],
+) -> list[dict[str, Any]]:
+    """Serialize Conclusion rows with their ordered tag names in one extra query."""
+    records = [dict(row) for row in rows]
+    if not records:
+        return records
+
+    by_id = {int(record["id"]): record for record in records}
+    for record in records:
+        record["tags"] = []
+
+    placeholders = ", ".join("?" for _ in by_id)
+    tag_rows = connection.execute(
+        f"""
+        SELECT ct.conclusion_id, t.name
+        FROM conclusion_tags AS ct
+        JOIN tags AS t ON t.id = ct.tag_id
+        WHERE ct.conclusion_id IN ({placeholders})
+        ORDER BY ct.conclusion_id, ct.position
+        """,
+        tuple(by_id),
+    ).fetchall()
+    for tag_row in tag_rows:
+        by_id[int(tag_row["conclusion_id"])]["tags"].append(tag_row["name"])
+    return records
 
 
 def list_conclusions(
@@ -154,7 +246,7 @@ def list_conclusions(
     return {
         "count": total,
         "returned": len(rows),
-        "items": [dict(row) for row in rows],
+        "items": _records_with_tags(connection, rows),
     }
 
 
@@ -167,4 +259,4 @@ def get_conclusion(
         "SELECT * FROM conclusions WHERE id = ?",
         (conclusion_id,),
     ).fetchone()
-    return dict(row) if row is not None else None
+    return _records_with_tags(connection, [row])[0] if row is not None else None

@@ -6,10 +6,11 @@
 | --- | --- | --- |
 | `id` | `INTEGER` | 主键，自增 |
 | `title` | `TEXT` | 必填，去除首尾空白后不可为空 |
-| `question` | `TEXT` | 必填 |
-| `conclusion` | `TEXT` | 必填 |
-| `reason` | `TEXT` | 必填 |
-| `tradeoffs` | `TEXT` | MVP 使用普通文本，默认空字符串 |
+| `question` | `TEXT` | 必填，普通文本 |
+| `conclusion` | `TEXT` | 必填，保存 GFM Markdown 原文 |
+| `reason` | `TEXT` | 必填，保存 GFM Markdown 原文 |
+| `tradeoffs` | `TEXT` | 保存 GFM Markdown 原文，默认空字符串 |
+| `conditions` | `TEXT` | 适用和重新评估条件，保存 GFM Markdown 原文，默认空字符串 |
 | `category` | `TEXT` | 必填；先允许自由输入，不做固定枚举 |
 | `confidence` | `TEXT` | 必须为 `High`、`Medium`、`Low` 之一 |
 | `created_at` | `TEXT` | UTC ISO 8601，创建时写入 |
@@ -21,10 +22,14 @@ API 输出可将时间字段序列化为 `createdAt` 和 `updatedAt`，数据库
 
 标签采用简单的多对多结构，避免把逗号分隔字符串当作数据：
 
-- `tags(id, name)`，其中规范化后的 `name` 唯一
-- `conclusion_tags(conclusion_id, tag_id)`，联合主键
+- `tags(id, name, normalized_name)`，其中 Unicode case-fold 后的 `normalized_name` 唯一
+- `conclusion_tags(conclusion_id, tag_id, position)`，保留每条 Conclusion 的标签顺序
 
-标签名称在写入时去除首尾空白；是否区分大小写在实现标签功能的提交中通过测试固定下来。
+标签名称在写入时去除首尾空白、不能为空、最长 50 个字符；单条 Conclusion 最多 20 个标签。标签使用 Unicode case-fold 去重，保留首次出现的显示形式。
+
+## Markdown 和图片
+
+Markdown 使用常见 GFM 子集。原始 HTML 不属于支持契约；前端渲染时必须进行 XSS 防护，并且只渲染公网 `https://` 图片 URL。不提供上传、本地托管或附件表。
 
 ## 搜索范围
 

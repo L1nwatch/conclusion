@@ -21,7 +21,9 @@ DEMO_CONCLUSIONS = [
         "conclusion": "工作日早上先留出九十分钟做深度学习，再处理消息和零碎任务。",
         "reason": "上午的注意力更稳定，也更少被临时事项打断。",
         "tradeoffs": "需要推迟查看消息，并接受部分早晨安排缺少弹性。",
+        "conditions": "如果上午出现固定会议，重新选择当天最早的完整专注时段。",
         "category": "学习",
+        "tags": ["深度学习", "时间安排"],
         "confidence": "High",
         "timestamp": "2026-07-11T13:00:00Z",
     },
@@ -31,7 +33,9 @@ DEMO_CONCLUSIONS = [
         "conclusion": "先连续两周稳定睡眠时间，恢复后再逐步增加训练量。",
         "reason": "睡眠不足会降低恢复质量，直接加量更容易让疲劳持续累积。",
         "tradeoffs": "短期训练进度会慢一些，但降低了受伤和中断计划的风险。",
+        "conditions": "连续两周睡眠稳定且白天精力恢复后，再增加训练量。",
         "category": "健康",
+        "tags": ["睡眠", "训练"],
         "confidence": "High",
         "timestamp": "2026-07-09T15:30:00Z",
     },
@@ -41,7 +45,9 @@ DEMO_CONCLUSIONS = [
         "conclusion": "暂不购买，等现有书桌明显限制使用时再重新评估。",
         "reason": "当前改善有限，不值得立即占用预算和空间。",
         "tradeoffs": "暂时接受高度和收纳不够理想。",
+        "conditions": "现有书桌影响坐姿或无法容纳必要设备时重新评估。",
         "category": "购物",
+        "tags": ["家具", "延迟购买"],
         "confidence": "Medium",
         "timestamp": "2026-07-06T18:20:00Z",
     },
@@ -51,7 +57,9 @@ DEMO_CONCLUSIONS = [
         "conclusion": "保留六个月基本支出的高流动性应急金，不参与长期投资。",
         "reason": "应急金的目标是随时可用，而不是最大化收益。",
         "tradeoffs": "接受这部分资金的长期收益低于股票等风险资产。",
+        "conditions": "基本支出或收入稳定性显著变化时，重新计算应急金额度。",
         "category": "投资",
+        "tags": ["应急金", "资产配置"],
         "confidence": "High",
         "timestamp": "2026-07-02T14:10:00Z",
     },
@@ -105,4 +113,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

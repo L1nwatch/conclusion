@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -19,6 +20,7 @@ EXPECTED_COLUMNS = {
     "conclusion",
     "reason",
     "tradeoffs",
+    "conditions",
     "category",
     "confidence",
     "created_at",
@@ -30,6 +32,7 @@ VALID_CONCLUSION = {
     "conclusion": "Wait until the current desk becomes limiting.",
     "reason": "The current setup is still adequate.",
     "tradeoffs": "Accept less flexibility for now.",
+    "conditions": "Reconsider if the desk becomes unstable.",
     "category": "Shopping",
     "confidence": "Medium",
     "created_at": "2026-07-14T12:00:00+00:00",
@@ -37,11 +40,11 @@ VALID_CONCLUSION = {
 }
 INSERT_CONCLUSION_SQL = """
     INSERT INTO conclusions (
-        title, question, conclusion, reason, tradeoffs,
+        title, question, conclusion, reason, tradeoffs, conditions,
         category, confidence, created_at, updated_at
     )
     VALUES (
-        :title, :question, :conclusion, :reason, :tradeoffs,
+        :title, :question, :conclusion, :reason, :tradeoffs, :conditions,
         :category, :confidence, :created_at, :updated_at
     )
 """
@@ -79,9 +82,61 @@ def test_init_db_creates_idempotent_schema(tmp_path: Path) -> None:
         indexes = {
             row["name"] for row in connection.execute("PRAGMA index_list(conclusions)").fetchall()
         }
+        tables = {
+            row["name"]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            ).fetchall()
+        }
 
     assert columns == EXPECTED_COLUMNS
     assert {"idx_conclusions_category", "idx_conclusions_updated_at"} <= indexes
+    assert {"conclusions", "tags", "conclusion_tags"} <= tables
+
+
+def test_init_db_migrates_existing_conclusions_with_default_conditions(tmp_path: Path) -> None:
+    database_path = tmp_path / "legacy.sqlite3"
+    with closing(sqlite3.connect(database_path)) as connection:
+        connection.execute(
+            """
+            CREATE TABLE conclusions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                question TEXT NOT NULL,
+                conclusion TEXT NOT NULL,
+                reason TEXT NOT NULL,
+                tradeoffs TEXT NOT NULL DEFAULT '',
+                category TEXT NOT NULL,
+                confidence TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        legacy_values = {
+            key: value for key, value in VALID_CONCLUSION.items() if key != "conditions"
+        }
+        connection.execute(
+            """
+            INSERT INTO conclusions (
+                title, question, conclusion, reason, tradeoffs,
+                category, confidence, created_at, updated_at
+            ) VALUES (
+                :title, :question, :conclusion, :reason, :tradeoffs,
+                :category, :confidence, :created_at, :updated_at
+            )
+            """,
+            legacy_values,
+        )
+        connection.commit()
+
+    with connect(database_path) as connection:
+        init_db(connection)
+        migrated = connection.execute(
+            "SELECT conditions FROM conclusions WHERE id = 1"
+        ).fetchone()
+
+    assert migrated["conditions"] == ""
 
 
 @pytest.mark.parametrize(
