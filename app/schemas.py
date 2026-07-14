@@ -46,6 +46,109 @@ def _validate_and_deduplicate_tags(tags: list[str]) -> list[str]:
     return unique
 
 
+class DecisionAnswers(BaseModel):
+    """Shared normalization for free-text decision model answers."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    @field_validator("*", mode="before")
+    @classmethod
+    def strip_answers(cls, value: object) -> object:
+        return _strip_outer_whitespace(value)
+
+
+class TimeHorizonAnswers(DecisionAnswers):
+    ten_hours: str = Field(default="", alias="tenHours", max_length=4_000)
+    ten_days: str = Field(default="", alias="tenDays", max_length=4_000)
+    ten_months: str = Field(default="", alias="tenMonths", max_length=4_000)
+    ten_years: str = Field(default="", alias="tenYears", max_length=4_000)
+
+
+class ScenarioAnswers(DecisionAnswers):
+    best_case: str = Field(default="", alias="bestCase", max_length=4_000)
+    likely_case: str = Field(default="", alias="likelyCase", max_length=4_000)
+    worst_case: str = Field(default="", alias="worstCase", max_length=4_000)
+    safeguards: str = Field(default="", max_length=4_000)
+
+
+class MungerChecklistAnswers(DecisionAnswers):
+    incentives: str = Field(default="", max_length=4_000)
+    opportunity_cost: str = Field(default="", alias="opportunityCost", max_length=4_000)
+    inversion: str = Field(default="", max_length=4_000)
+    second_order_effects: str = Field(
+        default="",
+        alias="secondOrderEffects",
+        max_length=4_000,
+    )
+    circle_of_competence: str = Field(
+        default="",
+        alias="circleOfCompetence",
+        max_length=4_000,
+    )
+    disconfirming_evidence: str = Field(
+        default="",
+        alias="disconfirmingEvidence",
+        max_length=4_000,
+    )
+
+
+class TimeHorizonModel(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    model_id: Literal["time-horizons"] = Field(alias="modelId")
+    answers: TimeHorizonAnswers
+
+    @model_validator(mode="after")
+    def require_answer(self) -> "TimeHorizonModel":
+        if not any(self.answers.model_dump().values()):
+            raise ValueError("a decision model must contain at least one answer")
+        return self
+
+
+class ScenarioModel(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    model_id: Literal["scenario-range"] = Field(alias="modelId")
+    answers: ScenarioAnswers
+
+    @model_validator(mode="after")
+    def require_answer(self) -> "ScenarioModel":
+        if not any(self.answers.model_dump().values()):
+            raise ValueError("a decision model must contain at least one answer")
+        return self
+
+
+class MungerChecklistModel(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    model_id: Literal["munger-checklist"] = Field(alias="modelId")
+    answers: MungerChecklistAnswers
+
+    @model_validator(mode="after")
+    def require_answer(self) -> "MungerChecklistModel":
+        if not any(self.answers.model_dump().values()):
+            raise ValueError("a decision model must contain at least one answer")
+        return self
+
+
+DecisionModel = TimeHorizonModel | ScenarioModel | MungerChecklistModel
+
+
+class DecisionAnalysis(BaseModel):
+    """Versioned, structured reasoning completed before the final conclusion."""
+
+    version: Literal[1] = 1
+    models: list[DecisionModel] = Field(default_factory=list, max_length=3)
+
+    @field_validator("models")
+    @classmethod
+    def require_unique_models(cls, models: list[DecisionModel]) -> list[DecisionModel]:
+        model_ids = [model.model_id for model in models]
+        if len(model_ids) != len(set(model_ids)):
+            raise ValueError("decision models must be unique")
+        return models
+
+
 class ConclusionCreate(BaseModel):
     """Fields accepted when creating a Conclusion."""
 
@@ -58,6 +161,12 @@ class ConclusionCreate(BaseModel):
     category: str = Field(min_length=1)
     tags: list[str] = Field(default_factory=list, max_length=20)
     confidence: Confidence
+    decision_analysis: DecisionAnalysis = Field(
+        default_factory=DecisionAnalysis,
+        alias="decisionAnalysis",
+    )
+
+    model_config = ConfigDict(populate_by_name=True)
 
     @field_validator(
         *TEXT_FIELDS,
@@ -92,6 +201,10 @@ class ConclusionUpdate(BaseModel):
     category: str | None = Field(default=None, min_length=1)
     tags: list[str] | None = Field(default=None, max_length=20)
     confidence: Confidence | None = None
+    decision_analysis: DecisionAnalysis | None = Field(
+        default=None,
+        alias="decisionAnalysis",
+    )
     expected_updated_at: str = Field(alias="expectedUpdatedAt", min_length=1)
 
     @field_validator(*TEXT_FIELDS, mode="before")

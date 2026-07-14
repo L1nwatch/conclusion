@@ -61,6 +61,35 @@ def test_patch_conclusion_can_clear_tags(tmp_path: Path) -> None:
     assert response.json()["tags"] == []
 
 
+def test_patch_conclusion_updates_decision_analysis(tmp_path: Path) -> None:
+    with TestClient(create_app(tmp_path / "conclusion.sqlite3")) as client:
+        created = client.post("/api/conclusions", json=CREATE_PAYLOAD).json()
+        analysis = {
+            "version": 1,
+            "models": [
+                {
+                    "modelId": "scenario-range",
+                    "answers": {
+                        "bestCase": "The replacement materially improves comfort.",
+                        "likelyCase": "The improvement is modest.",
+                        "worstCase": "It wastes money and space.",
+                        "safeguards": "Wait until the need is measurable.",
+                    },
+                }
+            ],
+        }
+        response = client.patch(
+            f"/api/conclusions/{created['id']}",
+            json={
+                "decisionAnalysis": analysis,
+                "expectedUpdatedAt": created["updatedAt"],
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["decisionAnalysis"] == analysis
+
+
 def test_patch_conclusion_rejects_stale_update_without_mutating_record(tmp_path: Path) -> None:
     with TestClient(create_app(tmp_path / "conclusion.sqlite3")) as client:
         created = client.post("/api/conclusions", json=CREATE_PAYLOAD).json()

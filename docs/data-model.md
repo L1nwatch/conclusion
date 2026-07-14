@@ -27,6 +27,18 @@ API 输出可将时间字段序列化为 `createdAt` 和 `updatedAt`，数据库
 
 标签名称在写入时去除首尾空白、不能为空、最长 50 个字符；单条 Conclusion 最多 20 个标签。标签使用 Unicode case-fold 去重，保留首次出现的显示形式。
 
+## `decision_analyses`
+
+决策推演与 Conclusion 是可选的一对一关系：
+
+| 字段 | SQLite 类型 | 约束/说明 |
+| --- | --- | --- |
+| `conclusion_id` | `INTEGER` | 主键及外键，删除 Conclusion 时级联删除 |
+| `schema_version` | `INTEGER` | 当前固定为 `1` |
+| `analysis_json` | `TEXT` | 经过 API schema 校验的结构化模型回答 |
+
+JSON 顶层包含 `version` 和 `models`。每个模型由稳定的 `modelId` 与固定答案字段组成；单个模型至少填写一个回答，同一分析中不允许重复模型。空分析不写入该表，API 统一返回 `{ "version": 1, "models": [] }`。
+
 ## Markdown 和图片
 
 `conclusion` 不使用 Markdown，确保核心决定足够短、可直接搜索和复用。`reason`、`tradeoffs`、`conditions` 使用常见 GFM 子集。原始 HTML 不属于支持契约；前端渲染时必须进行 XSS 防护，并且只渲染公网 `https://` 图片 URL。不提供上传、本地托管或附件表。

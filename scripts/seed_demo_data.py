@@ -25,6 +25,31 @@ DEMO_CONCLUSIONS = [
         "category": "学习",
         "tags": ["深度学习", "时间安排"],
         "confidence": "High",
+        "decision_analysis": {
+            "version": 1,
+            "models": [
+                {
+                    "model_id": "time-horizons",
+                    "answers": {
+                        "ten_hours": "当天更早完成高难度任务，晚些时候压力更小。",
+                        "ten_days": "连续执行后，更容易形成稳定的启动习惯。",
+                        "ten_months": "长期积累的完整专注时段会显著增加。",
+                        "ten_years": "具体时段不重要，保护长期深度工作的习惯更重要。",
+                    },
+                },
+                {
+                    "model_id": "munger-checklist",
+                    "answers": {
+                        "incentives": "即时消息奖励快速回应，但不奖励真正重要的长期学习。",
+                        "opportunity_cost": "把上午给零碎任务，就放弃了当天质量最高的注意力。",
+                        "inversion": "想保证学不深，只要每天先打开消息并不断切换任务。",
+                        "second_order_effects": "先完成深度学习会降低拖延带来的持续心理负担。",
+                        "circle_of_competence": "已观察到自己的上午专注度更高，但还需继续记录。",
+                        "disconfirming_evidence": "如果连续两周上午产出更低，就应调整时间。",
+                    },
+                },
+            ],
+        },
         "timestamp": "2026-07-11T13:00:00Z",
     },
     {

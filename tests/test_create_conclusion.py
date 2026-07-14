@@ -22,6 +22,31 @@ VALID_PAYLOAD = {
     "category": " Shopping ",
     "tags": [" Furniture ", "Ergonomics", "furniture"],
     "confidence": "Medium",
+    "decisionAnalysis": {
+        "version": 1,
+        "models": [
+            {
+                "modelId": "time-horizons",
+                "answers": {
+                    "tenHours": "No meaningful difference.",
+                    "tenDays": "The urge will probably fade.",
+                    "tenMonths": "The current desk may still be adequate.",
+                    "tenYears": "The purchase timing will not matter.",
+                },
+            },
+            {
+                "modelId": "munger-checklist",
+                "answers": {
+                    "incentives": "The sale creates artificial urgency.",
+                    "opportunityCost": "Keep the budget for a higher-impact upgrade.",
+                    "inversion": "Buying every discounted item guarantees clutter.",
+                    "secondOrderEffects": "A larger desk also consumes more space.",
+                    "circleOfCompetence": "I know my current desk is still usable.",
+                    "disconfirmingEvidence": "Persistent pain would change the decision.",
+                },
+            },
+        ],
+    },
 }
 
 
@@ -46,6 +71,7 @@ def test_create_conclusion_returns_and_persists_record(tmp_path: Path) -> None:
     assert body["category"] == "Shopping"
     assert body["tags"] == ["Furniture", "Ergonomics"]
     assert body["confidence"] == "Medium"
+    assert body["decisionAnalysis"] == VALID_PAYLOAD["decisionAnalysis"]
     assert body["createdAt"] == body["updatedAt"]
     assert datetime.fromisoformat(body["createdAt"]).utcoffset().total_seconds() == 0
 
@@ -79,12 +105,21 @@ def test_create_conclusion_returns_and_persists_record(tmp_path: Path) -> None:
 
     assert [tag["name"] for tag in tags] == body["tags"]
 
+    with connect(database_path, read_only=True) as connection:
+        analysis = connection.execute(
+            "SELECT schema_version, analysis_json FROM decision_analyses WHERE conclusion_id = 1"
+        ).fetchone()
+
+    assert analysis["schema_version"] == 1
+    assert '"model_id":"time-horizons"' in analysis["analysis_json"]
+
 
 def test_create_conclusion_defaults_optional_content_and_tags(tmp_path: Path) -> None:
     payload = dict(VALID_PAYLOAD)
     payload.pop("tradeoffs")
     payload.pop("conditions")
     payload.pop("tags")
+    payload.pop("decisionAnalysis")
 
     with TestClient(create_app(tmp_path / "conclusion.sqlite3")) as client:
         response = client.post("/api/conclusions", json=payload)
@@ -93,6 +128,7 @@ def test_create_conclusion_defaults_optional_content_and_tags(tmp_path: Path) ->
     assert response.json()["tradeoffs"] == ""
     assert response.json()["conditions"] == ""
     assert response.json()["tags"] == []
+    assert response.json()["decisionAnalysis"] == {"version": 1, "models": []}
 
 
 @pytest.mark.parametrize(
@@ -122,6 +158,55 @@ def test_create_conclusion_rejects_unknown_confidence(tmp_path: Path) -> None:
 def test_create_conclusion_rejects_long_core_decision(tmp_path: Path) -> None:
     payload = dict(VALID_PAYLOAD)
     payload["conclusion"] = "x" * 281
+
+    with TestClient(create_app(tmp_path / "conclusion.sqlite3")) as client:
+        response = client.post("/api/conclusions", json=payload)
+
+    assert response.status_code == 422
+
+
+@pytest.mark.parametrize(
+    "models",
+    [
+        [
+            {
+                "modelId": "time-horizons",
+                "answers": {
+                    "tenHours": "",
+                    "tenDays": "",
+                    "tenMonths": "",
+                    "tenYears": "",
+                },
+            }
+        ],
+        [
+            {
+                "modelId": "scenario-range",
+                "answers": {
+                    "bestCase": "Good",
+                    "likelyCase": "",
+                    "worstCase": "",
+                    "safeguards": "",
+                },
+            },
+            {
+                "modelId": "scenario-range",
+                "answers": {
+                    "bestCase": "Better",
+                    "likelyCase": "",
+                    "worstCase": "",
+                    "safeguards": "",
+                },
+            },
+        ],
+    ],
+)
+def test_create_conclusion_rejects_invalid_decision_models(
+    tmp_path: Path,
+    models: list[dict[str, object]],
+) -> None:
+    payload = dict(VALID_PAYLOAD)
+    payload["decisionAnalysis"] = {"version": 1, "models": models}
 
     with TestClient(create_app(tmp_path / "conclusion.sqlite3")) as client:
         response = client.post("/api/conclusions", json=payload)

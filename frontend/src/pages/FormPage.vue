@@ -3,7 +3,13 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import { ApiError, createConclusion, getConclusion, updateConclusion } from '../api'
+import DecisionWorkbench from '../components/DecisionWorkbench.vue'
 import MarkdownField from '../components/MarkdownField.vue'
+import {
+  compactDecisionAnalysis,
+  emptyDecisionAnalysis,
+  hydrateDecisionAnalysis,
+} from '../decisionModels'
 import type { ConclusionInput, Confidence } from '../types'
 
 const route = useRoute()
@@ -26,6 +32,7 @@ const form = reactive<ConclusionInput>({
   category: '',
   tags: [],
   confidence: 'Medium',
+  decisionAnalysis: emptyDecisionAnalysis(),
 })
 
 const confidenceOptions: Array<{ value: Confidence; label: string }> = [
@@ -44,6 +51,7 @@ function applyRecord(record: ConclusionInput & { updatedAt: string }) {
   form.category = record.category
   form.tags = [...record.tags]
   form.confidence = record.confidence
+  form.decisionAnalysis = hydrateDecisionAnalysis(record.decisionAnalysis)
   expectedUpdatedAt.value = record.updatedAt
 }
 
@@ -85,10 +93,15 @@ async function save() {
     const saved = isEdit.value
       ? await updateConclusion(conclusionId.value, {
           ...form,
+          decisionAnalysis: compactDecisionAnalysis(form.decisionAnalysis),
           tags: [...form.tags],
           expectedUpdatedAt: expectedUpdatedAt.value,
         })
-      : await createConclusion({ ...form, tags: [...form.tags] })
+      : await createConclusion({
+          ...form,
+          decisionAnalysis: compactDecisionAnalysis(form.decisionAnalysis),
+          tags: [...form.tags],
+        })
     ElMessage.success(isEdit.value ? '结论已更新' : '结论已保存')
     await router.push({ name: 'detail', params: { id: saved.id } })
   } catch (reason) {
@@ -121,7 +134,7 @@ onMounted(load)
         <div>
           <p class="section-kicker">{{ isEdit ? 'REFINE A DECISION' : 'CAPTURE A DECISION' }}</p>
           <h1>{{ isEdit ? '编辑结论' : '记下一个答案' }}</h1>
-          <p>先写最终答案，再补充为什么。结论本身保持一眼能读完。</p>
+          <p>定义问题，换几个角度推演，再把答案压缩成一两句话。</p>
         </div>
         <el-button type="primary" size="large" :loading="saving" @click="save">
           {{ isEdit ? '保存修改' : '保存结论' }}
@@ -152,22 +165,8 @@ onMounted(load)
           </template>
         </el-alert>
 
-        <section class="decision-input-block">
-          <label for="conclusion-input">一句话结论</label>
-          <el-input
-            id="conclusion-input"
-            v-model="form.conclusion"
-            type="textarea"
-            :rows="3"
-            maxlength="280"
-            show-word-limit
-            resize="vertical"
-            placeholder="例如：不买高比例腈纶的贴身衣物。"
-          />
-          <p>建议 1–2 句，只写“以后怎么做”；链接、图片和证据放在下方依据中。</p>
-        </section>
-
         <section class="metadata-grid compact-metadata">
+          <p class="stage-number wide-field">01 · 定义问题</p>
           <label>
             <span>这是什么决定？</span>
             <el-input v-model="form.title" maxlength="160" placeholder="短标题" />
@@ -213,13 +212,37 @@ onMounted(load)
           </label>
         </section>
 
+        <DecisionWorkbench v-model="form.decisionAnalysis" />
+
+        <section class="decision-output">
+          <header>
+            <p class="stage-number">03 · 拍板</p>
+            <h2>把推演压缩成一个答案。</h2>
+          </header>
+
+          <div class="decision-input-block">
+            <label for="conclusion-input">一句话结论</label>
+            <el-input
+              id="conclusion-input"
+              v-model="form.conclusion"
+              type="textarea"
+              :rows="3"
+              maxlength="280"
+              show-word-limit
+              resize="vertical"
+              placeholder="例如：不买高比例腈纶的贴身衣物。"
+            />
+            <p>建议 1–2 句，只写“以后怎么做”；链接、图片和证据放在下方依据中。</p>
+          </div>
+        </section>
+
         <section class="reason-editor">
           <MarkdownField
             v-model="form.reason"
             editor-id="reason-editor"
-            label="为什么这样决定？"
-            hint="支持 Markdown，可粘贴参考链接和公网 HTTPS 图片"
-            placeholder="写下最关键的 1–3 个理由；需要时再附证据、链接或图片。"
+            label="核心理由（最终摘要）"
+            hint="总结上面的推演；支持 Markdown、参考链接和公网 HTTPS 图片"
+            placeholder="把推演压缩成最关键的 1–3 个理由；需要时再附证据、链接或图片。"
           />
         </section>
 

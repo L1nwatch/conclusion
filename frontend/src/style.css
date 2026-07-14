@@ -459,6 +459,137 @@ textarea {
   border-bottom: 1px solid var(--line);
 }
 
+.stage-number {
+  margin: 0;
+  color: #4a675b;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.decision-workbench {
+  padding: 38px 0 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.workbench-header {
+  display: flex;
+  margin-bottom: 24px;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.workbench-header h2,
+.decision-output h2,
+.analysis-header h2 {
+  margin: 7px 0 0;
+  color: #17372b;
+  font-family: Georgia, "Songti SC", serif;
+  font-size: 1.65rem;
+  font-weight: 500;
+}
+
+.workbench-header > div > p:last-child {
+  margin: 9px 0 0;
+  color: #7b8a82;
+  font-size: 0.78rem;
+}
+
+.workbench-progress {
+  flex: none;
+  padding: 6px 9px;
+  color: #527064;
+  font-size: 0.68rem;
+  background: #e8eee9;
+  border-radius: 999px;
+}
+
+.model-collapse {
+  --el-collapse-border-color: #d3dcd6;
+  --el-collapse-header-bg-color: transparent;
+  --el-collapse-content-bg-color: transparent;
+}
+
+.model-collapse .el-collapse-item__header {
+  min-height: 82px;
+  height: auto;
+  padding: 12px 2px;
+}
+
+.model-title {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 150px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+}
+
+.model-mark {
+  color: #75877e;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.66rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+}
+
+.model-title strong,
+.model-title small {
+  display: block;
+}
+
+.model-title strong {
+  color: #27483a;
+  font-size: 0.9rem;
+}
+
+.model-title small {
+  margin-top: 4px;
+  color: #839087;
+  font-size: 0.7rem;
+  font-weight: 450;
+  line-height: 1.4;
+}
+
+.model-count {
+  padding: 3px 7px;
+  color: #3d6755;
+  font-size: 0.65rem;
+  background: #e2ede6;
+  border-radius: 999px;
+}
+
+.model-prompts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  padding: 4px 2px 26px 150px;
+}
+
+.model-prompts label {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+  color: #42584e;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.model-prompts .el-textarea__inner {
+  background: #f6f8f5;
+  box-shadow: 0 0 0 1px #d6ded8 inset;
+}
+
+.decision-output {
+  padding-top: 40px;
+}
+
+.decision-output > header {
+  margin-bottom: 24px;
+}
+
 .metadata-grid label,
 .optional-grid label {
   display: flex;
@@ -480,6 +611,59 @@ textarea {
 
 .reason-editor {
   padding-top: 28px;
+}
+
+.analysis-view {
+  padding: 38px 0 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.analysis-header {
+  margin-bottom: 24px;
+}
+
+.analysis-model {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  gap: 22px;
+  padding: 25px 0;
+  border-top: 1px solid var(--line);
+}
+
+.analysis-model-heading span {
+  color: #71857a;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.62rem;
+  font-weight: 750;
+  letter-spacing: 0.07em;
+}
+
+.analysis-model-heading h3 {
+  margin: 6px 0 0;
+  color: #27483a;
+  font-size: 0.88rem;
+}
+
+.analysis-model dl {
+  display: grid;
+  margin: 0;
+  grid-template-columns: 105px minmax(0, 1fr);
+  gap: 12px 16px;
+}
+
+.analysis-model dt {
+  padding-top: 2px;
+  color: #7f8d85;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.analysis-model dd {
+  margin: 0;
+  color: #3e554a;
+  font-size: 0.88rem;
+  line-height: 1.7;
+  white-space: pre-wrap;
 }
 
 .markdown-field {
@@ -596,7 +780,9 @@ textarea {
   .question-section,
   .detail-columns,
   .metadata-grid,
-  .optional-grid {
+  .optional-grid,
+  .model-prompts,
+  .analysis-model {
     grid-template-columns: 1fr;
   }
 
@@ -612,6 +798,32 @@ textarea {
 
   .metadata-grid .wide-field {
     grid-column: auto;
+  }
+
+  .workbench-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .model-title {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+  }
+
+  .model-mark {
+    grid-column: 1 / -1;
+  }
+
+  .model-prompts {
+    padding-left: 2px;
+  }
+
+  .analysis-model {
+    gap: 14px;
+  }
+
+  .analysis-model dl {
+    grid-template-columns: 86px minmax(0, 1fr);
   }
 
   .decision-input-block .el-textarea__inner {

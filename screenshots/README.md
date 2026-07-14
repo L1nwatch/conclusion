@@ -8,6 +8,8 @@
 list.png
 detail.png
 create.png
+decision-workbench.png
+decision-path.png
 search-and-tags.png        # 搜索和标签筛选实现后加入
 ```
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sqlite3
 from contextlib import contextmanager
@@ -134,6 +135,13 @@ def init_db(connection: sqlite3.Connection) -> None:
 
         CREATE INDEX IF NOT EXISTS idx_conclusion_tags_tag_id
         ON conclusion_tags(tag_id);
+
+        CREATE TABLE IF NOT EXISTS decision_analyses (
+            conclusion_id INTEGER PRIMARY KEY
+                REFERENCES conclusions(id) ON DELETE CASCADE,
+            schema_version INTEGER NOT NULL CHECK (schema_version = 1),
+            analysis_json TEXT NOT NULL
+        );
         """
     )
 
@@ -186,6 +194,11 @@ def create_conclusion(
         raise RuntimeError("Created Conclusion could not be loaded")
     conclusion_id = int(row["id"])
     _replace_conclusion_tags(connection, conclusion_id, values.get("tags", []))
+    _replace_decision_analysis(
+        connection,
+        conclusion_id,
+        values.get("decision_analysis", {"version": 1, "models": []}),
+    )
     return _records_with_tags(connection, [row])[0]
 
 
@@ -221,6 +234,31 @@ def _replace_conclusion_tags(
         )
 
 
+def _replace_decision_analysis(
+    connection: sqlite3.Connection,
+    conclusion_id: int,
+    analysis: Mapping[str, Any],
+) -> None:
+    """Replace one Conclusion's versioned decision analysis."""
+    connection.execute(
+        "DELETE FROM decision_analyses WHERE conclusion_id = ?",
+        (conclusion_id,),
+    )
+    if not analysis.get("models"):
+        return
+    connection.execute(
+        """
+        INSERT INTO decision_analyses (conclusion_id, schema_version, analysis_json)
+        VALUES (?, ?, ?)
+        """,
+        (
+            conclusion_id,
+            analysis["version"],
+            json.dumps(analysis, ensure_ascii=False, separators=(",", ":")),
+        ),
+    )
+
+
 def _records_with_tags(
     connection: sqlite3.Connection,
     rows: list[sqlite3.Row],
@@ -233,6 +271,7 @@ def _records_with_tags(
     by_id = {int(record["id"]): record for record in records}
     for record in records:
         record["tags"] = []
+        record["decision_analysis"] = {"version": 1, "models": []}
 
     placeholders = ", ".join("?" for _ in by_id)
     tag_rows = connection.execute(
@@ -247,6 +286,19 @@ def _records_with_tags(
     ).fetchall()
     for tag_row in tag_rows:
         by_id[int(tag_row["conclusion_id"])]["tags"].append(tag_row["name"])
+
+    analysis_rows = connection.execute(
+        f"""
+        SELECT conclusion_id, analysis_json
+        FROM decision_analyses
+        WHERE conclusion_id IN ({placeholders})
+        """,
+        tuple(by_id),
+    ).fetchall()
+    for analysis_row in analysis_rows:
+        by_id[int(analysis_row["conclusion_id"])]["decision_analysis"] = json.loads(
+            analysis_row["analysis_json"]
+        )
     return records
 
 
@@ -322,6 +374,12 @@ def update_conclusion(
 
     if "tags" in values:
         _replace_conclusion_tags(connection, conclusion_id, values["tags"])
+    if "decision_analysis" in values:
+        _replace_decision_analysis(
+            connection,
+            conclusion_id,
+            values["decision_analysis"],
+        )
 
     row = connection.execute(
         "SELECT * FROM conclusions WHERE id = ?",

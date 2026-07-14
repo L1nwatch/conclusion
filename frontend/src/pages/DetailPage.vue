@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getConclusion } from '../api'
+import DecisionAnalysisView from '../components/DecisionAnalysisView.vue'
 import MarkdownContent from '../components/MarkdownContent.vue'
 import type { ConclusionRecord } from '../types'
 
@@ -87,6 +88,8 @@ onMounted(load)
         <p class="section-kicker">原始问题</p>
         <p>{{ record.question }}</p>
       </section>
+
+      <DecisionAnalysisView :analysis="record.decisionAnalysis" />
 
       <section class="detail-section reason-section">
         <p class="section-kicker">为什么</p>

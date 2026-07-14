@@ -91,7 +91,7 @@ def test_init_db_creates_idempotent_schema(tmp_path: Path) -> None:
 
     assert columns == EXPECTED_COLUMNS
     assert {"idx_conclusions_category", "idx_conclusions_updated_at"} <= indexes
-    assert {"conclusions", "tags", "conclusion_tags"} <= tables
+    assert {"conclusions", "tags", "conclusion_tags", "decision_analyses"} <= tables
 
 
 def test_init_db_migrates_existing_conclusions_with_default_conditions(tmp_path: Path) -> None:

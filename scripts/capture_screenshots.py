@@ -31,6 +31,14 @@ def capture(base_url: str, output_dir: Path) -> None:
                 page.locator(ready_selector).wait_for(state="visible")
                 page.screenshot(path=output_dir / f"{name}.png", full_page=False)
 
+            page.goto(f"{base_url.rstrip('/')}/conclusions/new", wait_until="networkidle")
+            page.locator(".decision-workbench").screenshot(
+                path=output_dir / "decision-workbench.png"
+            )
+
+            page.goto(f"{base_url.rstrip('/')}/conclusions/1", wait_until="networkidle")
+            page.locator(".analysis-view").screenshot(path=output_dir / "decision-path.png")
+
             page.set_viewport_size({"width": 390, "height": 844})
             page.goto(f"{base_url.rstrip('/')}/conclusions/new", wait_until="networkidle")
             page.locator("[data-testid='conclusion-form']").wait_for(state="visible")
