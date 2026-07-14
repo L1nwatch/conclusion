@@ -17,7 +17,11 @@
 13. 实现编辑和删除交互
 14. 在 FengDock 中加入 `vendor/conclusion` submodule
 15. 在 FengDock 中接入前端构建、根 venv 子进程、Caddy 路由和数据卷
-16. 在 FengDock MCP 中逐个加入 `list_conclusions`、`search_conclusions`、`get_conclusion`
+16. 在 FengDock MCP 中加入 `list_conclusions`
+17. 在 FengDock MCP 中加入 `search_conclusions`
+18. 在 FengDock MCP 中加入 `get_conclusion`
+19. 在 FengDock MCP 中加入 `create_conclusion`
+20. 在 FengDock MCP 中加入 `update_conclusion`
 
 ## 每个提交的完成条件
 

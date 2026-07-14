@@ -251,7 +251,7 @@ git submodule update --init --recursive
 4. Caddy 将 `/conclusion` 去前缀后代理到 `backend:8006`。
 5. FengDock 首页增加入口。
 6. 增加父仓库集成测试。
-7. 最后逐个接入三个只读 MCP 工具。
+7. 最后逐个接入三个读取 MCP 工具和两个写入 MCP 工具。
 
 生产前端构建必须同时设置 Vite base 和 API base：
 
@@ -275,12 +275,14 @@ MCP 只改 FengDock 的 `app/mcp_server.py`，Conclusion 不启动自己的 MCP 
 
 实现要求：
 
-- 参考 FengDock 现有 Fire loader，加载 `vendor/conclusion/app/db.py`。
-- 使用 SQLite URI `mode=ro`，绝不让 MCP 创建或修改数据。
-- 复用 FengDock 现有 `read_only` annotations、`ToolError`、分页和结果上限逻辑。
-- `list_conclusions`、`search_conclusions`、`get_conclusion` 分别提交和测试。
+- 参考 FengDock 现有 Fire loader，加载 `vendor/conclusion/app/db.py`，不在父仓库复制 SQL。
+- `list_conclusions`、`search_conclusions`、`get_conclusion` 使用 SQLite URI `mode=ro`。
+- `create_conclusion`、`update_conclusion` 使用普通连接和显式事务，并返回写入后的完整记录。
+- 读取与写入使用不同的 MCP annotations；不得把写工具错误标记为 `readOnlyHint=True`。
+- 五个工具分别提交和测试。
 - 列表/搜索必须有明确上限；详情不存在时返回稳定、可理解的错误。
-- MCP 工具复用 `app/db.py` 的查询函数，不在父仓库复制 SQL。
+- 写入失败必须完整回滚，并转换为稳定的 `ToolError`，不能留下部分标签关联。
+- MCP 写入暂不包含删除；删除仍由 UI 明确确认。
 
 ## 两个仓库的发布顺序
 
@@ -347,7 +349,7 @@ docker compose logs --tail=200 backend caddy
 - `/app/vendor/conclusion/data` 是否可写且持久化。
 - 前端资源 URL 是否带 `/conclusion/` base。
 - API 请求是否走 `/conclusion/api/...`。
-- MCP 是否只读打开了正确的数据库文件。
+- MCP 读取是否以只读方式打开正确数据库，新增/更新是否写入同一个持久化数据库。
 
 ## 回滚
 
@@ -381,3 +383,7 @@ private submodule token 没有 `L1nwatch/conclusion` 的 Contents read 权限，
 ### MCP 读到了错误或旧数据
 
 确认 FengDock MCP 配置的数据库路径与 Conclusion 实际写入路径相同，并确认读取使用 SQLite `mode=ro`。
+
+### MCP 可以读取但不能新增或更新
+
+确认写工具没有复用 `mode=ro` 连接，数据库 volume 对 backend 用户可写，并检查 SQLite busy/locked 错误。Conclusion 连接应启用 WAL 和 busy timeout，支持 API 与 MCP 进程并发访问。

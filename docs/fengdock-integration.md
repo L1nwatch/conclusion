@@ -10,7 +10,7 @@ Conclusion 主要参考 FengDock 的 `vendor/fire`：
 - 所有进程运行在同一个 backend 容器中
 - Caddy 去掉模块路径前缀后反向代理到容器内端口
 - SQLite 数据目录挂载到 FengDock 的持久化 volume
-- FengDock MCP 复用 submodule 的数据库读取函数
+- FengDock MCP 复用 submodule 的数据库读写函数
 
 `TriggerToDo` 的独立 venv 是因为它有更多专属依赖，不是简单模块的默认做法。Conclusion 的 MVP 依赖已被 FengDock 根环境覆盖，因此不复制该模式。
 
@@ -34,7 +34,7 @@ Conclusion 主要参考 FengDock 的 `vendor/fire`：
 4. 在 Caddy 中把 `/conclusion` 和 `/conclusion/*` 去前缀后代理到 `backend:8006`
 5. 把 `backend_db` 挂载到 `/app/vendor/conclusion/data`
 6. 在主页增加 Conclusion 入口
-7. 在统一 MCP 中加载 `vendor/conclusion/app/db.py` 的只读查询函数
+7. 在统一 MCP 中加载 `vendor/conclusion/app/db.py` 的读写函数
 
 ## 前端子路径
 
@@ -47,10 +47,12 @@ Conclusion 主要参考 FengDock 的 `vendor/fire`：
 
 ## MCP 边界
 
-MCP 工具只放在 FengDock，不在 Conclusion 中启动第二个 MCP server。Conclusion 只提供可复用且有测试的读取函数：
+MCP 工具只放在 FengDock，不在 Conclusion 中启动第二个 MCP server。Conclusion 提供可复用且有测试的数据库函数：
 
 - 列出最近或全部 Conclusion（有上限）
 - 按关键词、分类和标签搜索
 - 按 ID 读取单条详情
+- 新增 Conclusion
+- 按 ID 更新 Conclusion
 
-FengDock 以 SQLite `mode=ro` 打开数据库，并继续复用现有 MCP OAuth、结果分页/上限和错误处理逻辑。
+FengDock 的读取工具以 SQLite `mode=ro` 打开数据库；新增和更新工具使用普通事务连接。所有工具继续复用现有 MCP OAuth、错误处理和 annotations，列表/搜索继续使用分页和结果上限。MVP 不通过 MCP 删除 Conclusion。

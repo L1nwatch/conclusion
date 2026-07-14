@@ -23,7 +23,7 @@ Conclusion 是一个个人决策知识库，用来保存“已经想清楚的最
 - 按标题、问题、结论和原因进行关键词搜索
 - 按分类和标签筛选
 - 标记 `High`、`Medium` 或 `Low` 置信度
-- 后续通过 FengDock 的只读 MCP 服务供 ChatGPT 查询
+- 后续通过 FengDock MCP 供 ChatGPT 查询、新增和更新 Conclusion
 
 ## MVP 页面
 
@@ -122,13 +122,18 @@ curl -fsS http://127.0.0.1:8006/api/health
 
 ## 后续 MCP
 
-MCP 由 FengDock 的统一 OAuth 和只读 MCP 服务对外提供：
+MCP 由 FengDock 的统一 OAuth 服务对外提供。读取工具：
 
 - `list_conclusions`
 - `search_conclusions`
 - `get_conclusion`
 
-Conclusion 的 `app/db.py` 提供可复用读取函数；FengDock 像读取 `vendor/fire/app/db.py` 一样加载这些函数，并用 SQLite `mode=ro` 打开数据库。MCP 不提供新增、编辑或删除能力。
+写入工具：
+
+- `create_conclusion`
+- `update_conclusion`
+
+Conclusion 的 `app/db.py` 提供可复用读写函数，FengDock 像加载 `vendor/fire/app/db.py` 一样加载它们。读取工具使用只读连接；写入工具使用普通事务连接，并通过 MCP annotations 明确标记副作用。MVP 暂不开放 `delete_conclusion`，删除仍在 UI 中由用户确认。
 
 ## 暂时不做
 
