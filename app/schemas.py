@@ -51,7 +51,7 @@ class ConclusionCreate(BaseModel):
 
     title: str = Field(min_length=1)
     question: str = Field(min_length=1)
-    conclusion: str = Field(min_length=1)
+    conclusion: str = Field(min_length=1, max_length=280)
     reason: str = Field(min_length=1)
     tradeoffs: str = ""
     conditions: str = ""
@@ -85,7 +85,7 @@ class ConclusionUpdate(BaseModel):
 
     title: str | None = Field(default=None, min_length=1)
     question: str | None = Field(default=None, min_length=1)
-    conclusion: str | None = Field(default=None, min_length=1)
+    conclusion: str | None = Field(default=None, min_length=1, max_length=280)
     reason: str | None = Field(default=None, min_length=1)
     tradeoffs: str | None = None
     conditions: str | None = None

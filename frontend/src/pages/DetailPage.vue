@@ -65,7 +65,8 @@ onMounted(load)
 
     <article v-else-if="record" class="detail-card" data-testid="conclusion-detail">
       <div class="detail-meta">
-        <span class="category-pill">{{ record.category }}</span>
+        <span>{{ record.category }}</span>
+        <span>·</span>
         <span class="confidence-label" :data-confidence="record.confidence">
           {{ record.confidence }} confidence
         </span>
@@ -77,37 +78,34 @@ onMounted(load)
 
       <h1>{{ record.title }}</h1>
 
+      <section class="decision-hero">
+        <p class="section-kicker">结论</p>
+        <p class="detail-decision">{{ record.conclusion }}</p>
+      </section>
+
       <section class="detail-section question-section">
-        <p class="section-kicker">ORIGINAL QUESTION</p>
+        <p class="section-kicker">原始问题</p>
         <p>{{ record.question }}</p>
       </section>
 
-      <section class="detail-section conclusion-section">
-        <p class="section-kicker">FINAL CONCLUSION</p>
-        <MarkdownContent :content="record.conclusion" preview-id="conclusion-preview" />
+      <section class="detail-section reason-section">
+        <p class="section-kicker">为什么</p>
+        <MarkdownContent :content="record.reason" preview-id="reason-preview" />
       </section>
 
-      <div class="detail-columns">
-        <section class="detail-section">
-          <p class="section-kicker">WHY</p>
-          <MarkdownContent :content="record.reason" preview-id="reason-preview" />
-        </section>
-        <section class="detail-section">
-          <p class="section-kicker">TRADEOFFS</p>
+      <div v-if="record.tradeoffs || record.conditions" class="detail-columns">
+        <section v-if="record.tradeoffs" class="detail-section context-section">
+          <p class="section-kicker">接受的取舍</p>
           <MarkdownContent
-            :content="record.tradeoffs || '没有额外记录的取舍。'"
+            :content="record.tradeoffs"
             preview-id="tradeoffs-preview"
           />
         </section>
+        <section v-if="record.conditions" class="detail-section context-section">
+          <p class="section-kicker">重新评估条件</p>
+          <MarkdownContent :content="record.conditions" preview-id="conditions-preview" />
+        </section>
       </div>
-
-      <section class="detail-section">
-        <p class="section-kicker">CONDITIONS</p>
-        <MarkdownContent
-          :content="record.conditions || '没有额外记录的适用条件。'"
-          preview-id="conditions-preview"
-        />
-      </section>
 
       <footer class="detail-footer">
         <span>创建于 {{ formatDate(record.createdAt) }}</span>

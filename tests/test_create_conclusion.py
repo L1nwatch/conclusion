@@ -15,8 +15,8 @@ from app.main import create_app
 VALID_PAYLOAD = {
     "title": "  Buy a standing desk  ",
     "question": " Should I replace my current desk? ",
-    "conclusion": " Wait until the current desk becomes limiting.\n\n[Reference](https://example.com) ",
-    "reason": " The current setup is still **adequate**. ",
+    "conclusion": " Wait until the current desk becomes limiting. ",
+    "reason": " The current setup is still **adequate**.\n\n[Reference](https://example.com) ",
     "tradeoffs": " Accept less flexibility for now. ",
     "conditions": " Reconsider when the desk becomes unstable. ",
     "category": " Shopping ",
@@ -36,11 +36,11 @@ def test_create_conclusion_returns_and_persists_record(tmp_path: Path) -> None:
     assert body["id"] == 1
     assert body["title"] == "Buy a standing desk"
     assert body["question"] == "Should I replace my current desk?"
-    assert body["conclusion"] == (
-        "Wait until the current desk becomes limiting.\n\n"
+    assert body["conclusion"] == "Wait until the current desk becomes limiting."
+    assert body["reason"] == (
+        "The current setup is still **adequate**.\n\n"
         "[Reference](https://example.com)"
     )
-    assert body["reason"] == "The current setup is still **adequate**."
     assert body["tradeoffs"] == "Accept less flexibility for now."
     assert body["conditions"] == "Reconsider when the desk becomes unstable."
     assert body["category"] == "Shopping"
@@ -112,6 +112,16 @@ def test_create_conclusion_rejects_blank_required_text(tmp_path: Path, field: st
 def test_create_conclusion_rejects_unknown_confidence(tmp_path: Path) -> None:
     payload = dict(VALID_PAYLOAD)
     payload["confidence"] = "Certain"
+
+    with TestClient(create_app(tmp_path / "conclusion.sqlite3")) as client:
+        response = client.post("/api/conclusions", json=payload)
+
+    assert response.status_code == 422
+
+
+def test_create_conclusion_rejects_long_core_decision(tmp_path: Path) -> None:
+    payload = dict(VALID_PAYLOAD)
+    payload["conclusion"] = "x" * 281
 
     with TestClient(create_app(tmp_path / "conclusion.sqlite3")) as client:
         response = client.post("/api/conclusions", json=payload)

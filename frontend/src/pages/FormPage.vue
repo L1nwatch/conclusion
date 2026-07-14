@@ -15,7 +15,6 @@ const saving = ref(false)
 const error = ref('')
 const conflict = ref(false)
 const expectedUpdatedAt = ref('')
-const activeSection = ref('conclusion')
 
 const form = reactive<ConclusionInput>({
   title: '',
@@ -121,8 +120,8 @@ onMounted(load)
       <header class="form-header">
         <div>
           <p class="section-kicker">{{ isEdit ? 'REFINE A DECISION' : 'CAPTURE A DECISION' }}</p>
-          <h1>{{ isEdit ? '编辑 Conclusion' : '新增 Conclusion' }}</h1>
-          <p>保留最后决定、理由、取舍和适用条件。内容支持 Markdown。</p>
+          <h1>{{ isEdit ? '编辑结论' : '记下一个答案' }}</h1>
+          <p>先写最终答案，再补充为什么。结论本身保持一眼能读完。</p>
         </div>
         <el-button type="primary" size="large" :loading="saving" @click="save">
           {{ isEdit ? '保存修改' : '保存结论' }}
@@ -153,20 +152,30 @@ onMounted(load)
           </template>
         </el-alert>
 
-        <section class="metadata-grid">
-          <label class="wide-field">
-            <span>标题</span>
-            <el-input v-model="form.title" maxlength="160" show-word-limit />
+        <section class="decision-input-block">
+          <label for="conclusion-input">一句话结论</label>
+          <el-input
+            id="conclusion-input"
+            v-model="form.conclusion"
+            type="textarea"
+            :rows="3"
+            maxlength="280"
+            show-word-limit
+            resize="vertical"
+            placeholder="例如：不买高比例腈纶的贴身衣物。"
+          />
+          <p>建议 1–2 句，只写“以后怎么做”；链接、图片和证据放在下方依据中。</p>
+        </section>
+
+        <section class="metadata-grid compact-metadata">
+          <label>
+            <span>这是什么决定？</span>
+            <el-input v-model="form.title" maxlength="160" placeholder="短标题" />
           </label>
 
-          <label class="wide-field">
+          <label>
             <span>原始问题</span>
-            <el-input
-              v-model="form.question"
-              type="textarea"
-              :rows="3"
-              resize="vertical"
-            />
+            <el-input v-model="form.question" placeholder="当时要决定什么？" />
           </label>
 
           <label>
@@ -204,44 +213,42 @@ onMounted(load)
           </label>
         </section>
 
-        <el-tabs v-model="activeSection" class="content-tabs" stretch>
-          <el-tab-pane label="最终结论" name="conclusion">
-            <MarkdownField
-              v-model="form.conclusion"
-              editor-id="conclusion-editor"
-              label="最终结论"
-              hint="明确写下已经决定怎么做"
-              placeholder="例如：不购买高比例腈纶的贴身衣物……"
-            />
-          </el-tab-pane>
-          <el-tab-pane label="主要原因" name="reason">
-            <MarkdownField
-              v-model="form.reason"
-              editor-id="reason-editor"
-              label="主要原因"
-              hint="记录证据、经验和参考链接"
-              placeholder="为什么做出这个决定？"
-            />
-          </el-tab-pane>
-          <el-tab-pane label="取舍" name="tradeoffs">
-            <MarkdownField
-              v-model="form.tradeoffs"
-              editor-id="tradeoffs-editor"
-              label="接受的取舍"
-              hint="可以为空"
-              placeholder="接受了哪些缺点，放弃了哪些方案？"
-            />
-          </el-tab-pane>
-          <el-tab-pane label="适用条件" name="conditions">
-            <MarkdownField
-              v-model="form.conditions"
-              editor-id="conditions-editor"
-              label="适用和重新评估条件"
-              hint="可以为空"
-              placeholder="什么情况下这条结论不再适用？"
-            />
-          </el-tab-pane>
-        </el-tabs>
+        <section class="reason-editor">
+          <MarkdownField
+            v-model="form.reason"
+            editor-id="reason-editor"
+            label="为什么这样决定？"
+            hint="支持 Markdown，可粘贴参考链接和公网 HTTPS 图片"
+            placeholder="写下最关键的 1–3 个理由；需要时再附证据、链接或图片。"
+          />
+        </section>
+
+        <el-collapse class="optional-context">
+          <el-collapse-item title="补充取舍和重新评估条件（可选）" name="context">
+            <div class="optional-grid">
+              <label>
+                <span>接受的取舍</span>
+                <el-input
+                  v-model="form.tradeoffs"
+                  type="textarea"
+                  :rows="4"
+                  resize="vertical"
+                  placeholder="为了这个决定，接受了什么缺点？"
+                />
+              </label>
+              <label>
+                <span>重新评估条件</span>
+                <el-input
+                  v-model="form.conditions"
+                  type="textarea"
+                  :rows="4"
+                  resize="vertical"
+                  placeholder="出现什么变化时，需要重新判断？"
+                />
+              </label>
+            </div>
+          </el-collapse-item>
+        </el-collapse>
 
         <footer class="form-actions">
           <el-button @click="router.back()">取消</el-button>

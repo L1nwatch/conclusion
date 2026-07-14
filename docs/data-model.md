@@ -7,7 +7,7 @@
 | `id` | `INTEGER` | 主键，自增 |
 | `title` | `TEXT` | 必填，去除首尾空白后不可为空 |
 | `question` | `TEXT` | 必填，普通文本 |
-| `conclusion` | `TEXT` | 必填，保存 GFM Markdown 原文 |
+| `conclusion` | `TEXT` | 必填，简短纯文本；建议 1–2 句、最多 280 字符 |
 | `reason` | `TEXT` | 必填，保存 GFM Markdown 原文 |
 | `tradeoffs` | `TEXT` | 保存 GFM Markdown 原文，默认空字符串 |
 | `conditions` | `TEXT` | 适用和重新评估条件，保存 GFM Markdown 原文，默认空字符串 |
@@ -29,7 +29,7 @@ API 输出可将时间字段序列化为 `createdAt` 和 `updatedAt`，数据库
 
 ## Markdown 和图片
 
-Markdown 使用常见 GFM 子集。原始 HTML 不属于支持契约；前端渲染时必须进行 XSS 防护，并且只渲染公网 `https://` 图片 URL。不提供上传、本地托管或附件表。
+`conclusion` 不使用 Markdown，确保核心决定足够短、可直接搜索和复用。`reason`、`tradeoffs`、`conditions` 使用常见 GFM 子集。原始 HTML 不属于支持契约；前端渲染时必须进行 XSS 防护，并且只渲染公网 `https://` 图片 URL。不提供上传、本地托管或附件表。
 
 ## 搜索范围
 

@@ -40,56 +40,31 @@ function formatDate(value: string) {
   }).format(new Date(value))
 }
 
-function markdownExcerpt(value: string) {
-  return value
-    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
-    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
-    .replace(/^#{1,6}\s+/gm, '')
-    .replace(/[*_`>~-]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
 onMounted(load)
 </script>
 
 <template>
   <main class="page-shell">
-    <header class="hero-panel">
-      <div class="hero-copy">
-        <p class="eyebrow">PERSONAL DECISION LIBRARY</p>
-        <h1>已经想清楚的事，<br />不必再想一遍。</h1>
-        <p class="hero-description">
-          保存最终决定、理由和取舍，让下一次判断从已有结论开始。
-        </p>
+    <header class="library-header">
+      <div>
+        <p class="eyebrow">CONCLUSION · {{ total }} DECISIONS</p>
+        <h1>不再重复思考。</h1>
+        <p>只保存已经拍板的答案。</p>
       </div>
-
-      <div class="hero-stats" aria-label="结论统计">
-        <div class="stat-card">
-          <span class="stat-value">{{ total }}</span>
-          <span class="stat-label">条结论</span>
-        </div>
-        <div class="stat-card">
-          <span class="stat-value">{{ categories }}</span>
-          <span class="stat-label">个分类</span>
-        </div>
-      </div>
+      <el-button type="primary" size="large" @click="router.push({ name: 'create' })">
+        + 记一条结论
+      </el-button>
     </header>
 
     <section class="content-panel" aria-labelledby="library-title">
       <div class="section-heading">
         <div>
-          <p class="section-kicker">LIBRARY</p>
-          <h2 id="library-title">结论库</h2>
+          <h2 id="library-title">最近结论</h2>
+          <p>{{ categories }} 个分类 · 按最后更新排序</p>
         </div>
-        <div class="section-actions">
-          <el-button class="refresh-button" plain :loading="loading" @click="load">
-            重新读取
-          </el-button>
-          <el-button type="primary" @click="router.push({ name: 'create' })">
-            新增 Conclusion
-          </el-button>
-        </div>
+        <button class="text-action" type="button" :disabled="loading" @click="load">
+          {{ loading ? '读取中…' : '刷新' }}
+        </button>
       </div>
 
       <div v-if="loading" class="state-panel" data-testid="loading-state">
@@ -109,27 +84,32 @@ onMounted(load)
         description="还没有结论。先从一个已经拍板的问题开始。"
       />
 
-      <div v-else class="conclusion-grid" data-testid="conclusion-list">
+      <div v-else class="decision-list" data-testid="conclusion-list">
         <article
-          v-for="item in items"
+          v-for="(item, index) in items"
           :key="item.id"
-          class="conclusion-card"
+          class="decision-row"
           tabindex="0"
           role="link"
           @click="router.push({ name: 'detail', params: { id: item.id } })"
           @keydown.enter="router.push({ name: 'detail', params: { id: item.id } })"
         >
-          <div class="card-meta">
-            <span class="category-pill">{{ item.category }}</span>
-            <span class="updated-at">{{ formatDate(item.updatedAt) }}</span>
+          <span class="decision-index">{{ String(index + 1).padStart(2, '0') }}</span>
+          <div class="decision-body">
+            <div class="card-meta">
+              <span>{{ item.category }} · {{ item.title }}</span>
+              <span class="updated-at">{{ formatDate(item.updatedAt) }}</span>
+            </div>
+            <p class="decision-statement">{{ item.conclusion }}</p>
+            <div class="card-footer">
+              <span class="confidence-dot" :data-confidence="item.confidence" />
+              <span>{{ confidenceLabel[item.confidence] }}</span>
+              <span v-for="tag in item.tags.slice(0, 3)" :key="tag" class="inline-tag">
+                #{{ tag }}
+              </span>
+            </div>
           </div>
-          <h3>{{ item.title }}</h3>
-          <p class="card-conclusion">{{ markdownExcerpt(item.conclusion) }}</p>
-          <div class="card-footer">
-            <span class="confidence-dot" :data-confidence="item.confidence" />
-            <span>{{ confidenceLabel[item.confidence] }}</span>
-            <span class="open-label">查看详情 →</span>
-          </div>
+          <span class="row-arrow" aria-hidden="true">↗</span>
         </article>
       </div>
     </section>

@@ -111,6 +111,7 @@ def test_patch_conclusion_returns_404_for_missing_record(tmp_path: Path) -> None
         {"expectedUpdatedAt": "2026-07-14T12:00:00Z"},
         {"title": "   ", "expectedUpdatedAt": "2026-07-14T12:00:00Z"},
         {"title": None, "expectedUpdatedAt": "2026-07-14T12:00:00Z"},
+        {"conclusion": "x" * 281, "expectedUpdatedAt": "2026-07-14T12:00:00Z"},
         {"title": "Updated", "expectedUpdatedAt": "2026-07-14T12:00:00"},
     ],
 )
