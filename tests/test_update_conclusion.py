@@ -67,8 +67,9 @@ def test_patch_conclusion_updates_decision_analysis(tmp_path: Path) -> None:
         analysis = {
             "version": 1,
             "models": [
-                {
-                    "modelId": "scenario-range",
+                    {
+                        "modelId": "scenario-range",
+                        "modelVersion": 1,
                     "answers": {
                         "bestCase": "The replacement materially improves comfort.",
                         "likelyCase": "The improvement is modest.",

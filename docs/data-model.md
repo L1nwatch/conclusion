@@ -37,7 +37,27 @@ API 输出可将时间字段序列化为 `createdAt` 和 `updatedAt`，数据库
 | `schema_version` | `INTEGER` | 当前固定为 `1` |
 | `analysis_json` | `TEXT` | 经过 API schema 校验的结构化模型回答 |
 
-JSON 顶层包含 `version` 和 `models`。每个模型由稳定的 `modelId` 与固定答案字段组成；单个模型至少填写一个回答，同一分析中不允许重复模型。空分析不写入该表，API 统一返回 `{ "version": 1, "models": [] }`。
+JSON 顶层包含 `version` 和 `models`。每次模型运行保存稳定的 `modelId`、`modelVersion` 和非空 `answers`；写入时校验模型版本及问题键确实存在。同一分析中不允许重复模型。空分析不写入该表，API 统一返回 `{ "version": 1, "models": [] }`。
+
+## `decision_models`
+
+决策模型注册表是网页和 MCP 的共同数据源：
+
+| 字段 | SQLite 类型 | 约束/说明 |
+| --- | --- | --- |
+| `id` | `TEXT` | 稳定 slug，主键，创建后不复用 |
+| `version` | `INTEGER` | 当前固定为 `1`，为后续版本历史预留 |
+| `name` | `TEXT` | 展示名称 |
+| `short_name` | `TEXT` | 紧凑英文或符号标识 |
+| `description` | `TEXT` | 模型用途说明 |
+| `prompts_json` | `TEXT` | 有序问题定义，每项包含稳定 key、label 和 placeholder |
+| `source_name` | `TEXT` | 可选来源名称 |
+| `source_url` | `TEXT` | 可选公网 HTTPS 来源 |
+| `is_builtin` | `INTEGER` | `1` 为内置模型，`0` 为 API/MCP 创建模型 |
+| `created_at` | `TEXT` | UTC ISO 8601 |
+| `updated_at` | `TEXT` | UTC ISO 8601；当前不可变版本与创建时间相同 |
+
+应用初始化时以 `INSERT ... ON CONFLICT DO NOTHING` 注册三个内置模型，不覆盖数据库中已有定义。MVP 支持列表、详情和创建，不支持覆盖或删除；模型修订将在后续通过新增版本完成。
 
 ## Markdown 和图片
 

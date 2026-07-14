@@ -15,6 +15,52 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_DATABASE_PATH = ROOT_DIR / "data" / "conclusion.sqlite3"
 DATABASE_PATH_ENV = "CONCLUSION_DATABASE_PATH"
 BUSY_TIMEOUT_MS = 5_000
+BUILTIN_DECISION_MODELS = (
+    {
+        "id": "time-horizons",
+        "name": "时间尺度",
+        "short_name": "10H · 10D · 10M · 10Y",
+        "description": "把眼前情绪拉远，观察这个决定在不同时间尺度上的影响。",
+        "prompts": [
+            {"key": "tenHours", "label": "10 小时后", "placeholder": "今天晚些时候，我会怎么看？"},
+            {"key": "tenDays", "label": "10 天后", "placeholder": "短期影响会是什么？"},
+            {"key": "tenMonths", "label": "10 个月后", "placeholder": "它会带来什么持续变化？"},
+            {"key": "tenYears", "label": "10 年后", "placeholder": "长期回看，什么真正重要？"},
+        ],
+        "source_name": "Suzy Welch 10-10-10",
+        "source_url": "https://suzywelch.com/books/",
+    },
+    {
+        "id": "scenario-range",
+        "name": "情景边界",
+        "short_name": "BEST · LIKELY · WORST",
+        "description": "同时看到上行空间、最可能结果和可以承受的下行风险。",
+        "prompts": [
+            {"key": "bestCase", "label": "最好情况", "placeholder": "合理范围内，最好会发生什么？"},
+            {"key": "likelyCase", "label": "最可能情况", "placeholder": "不乐观也不悲观，最可能怎样？"},
+            {"key": "worstCase", "label": "最坏情况", "placeholder": "合理的最坏结果是什么？"},
+            {"key": "safeguards", "label": "保护措施", "placeholder": "如何降低损失，或者保留退路？"},
+        ],
+        "source_name": "",
+        "source_url": "",
+    },
+    {
+        "id": "munger-checklist",
+        "name": "芒格式多模型检查",
+        "short_name": "LATTICEWORK CHECK",
+        "description": "受多模型思维启发，从激励、反演和认知盲点检查遗漏。",
+        "prompts": [
+            {"key": "incentives", "label": "激励", "placeholder": "谁希望我做什么？各方真实激励是什么？"},
+            {"key": "opportunityCost", "label": "机会成本", "placeholder": "选择它，就放弃了什么更好的用途？"},
+            {"key": "inversion", "label": "反演", "placeholder": "怎样做几乎一定会失败？现在是否正在这样做？"},
+            {"key": "secondOrderEffects", "label": "二阶效应", "placeholder": "然后呢？这个结果还会继续导致什么？"},
+            {"key": "circleOfCompetence", "label": "能力圈", "placeholder": "我真正知道什么？哪些只是在猜？"},
+            {"key": "disconfirmingEvidence", "label": "反方证据", "placeholder": "什么事实会证明我错了？我是否主动找过？"},
+        ],
+        "source_name": "Charlie Munger — Elementary Worldly Wisdom",
+        "source_url": "https://www.ivey.uwo.ca/media/2975916/the-best-of-charlie-munger-1994-2011.pdf",
+    },
+)
 UPDATE_FIELDS = (
     "title",
     "question",
@@ -33,6 +79,14 @@ class ConclusionUpdateConflictError(Exception):
     def __init__(self, current_updated_at: str) -> None:
         super().__init__("Conclusion was modified by another writer")
         self.current_updated_at = current_updated_at
+
+
+class DecisionModelAlreadyExistsError(Exception):
+    """Raised when a new decision model reuses an existing stable ID."""
+
+
+class UnknownDecisionModelError(Exception):
+    """Raised when analysis references a model or prompt that is not registered."""
 
 
 def utc_timestamp() -> str:
@@ -142,6 +196,20 @@ def init_db(connection: sqlite3.Connection) -> None:
             schema_version INTEGER NOT NULL CHECK (schema_version = 1),
             analysis_json TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS decision_models (
+            id TEXT PRIMARY KEY,
+            version INTEGER NOT NULL CHECK (version = 1),
+            name TEXT NOT NULL,
+            short_name TEXT NOT NULL,
+            description TEXT NOT NULL,
+            prompts_json TEXT NOT NULL,
+            source_name TEXT NOT NULL DEFAULT '',
+            source_url TEXT NOT NULL DEFAULT '',
+            is_builtin INTEGER NOT NULL CHECK (is_builtin IN (0, 1)),
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
         """
     )
 
@@ -152,7 +220,34 @@ def init_db(connection: sqlite3.Connection) -> None:
         connection.execute(
             "ALTER TABLE conclusions ADD COLUMN conditions TEXT NOT NULL DEFAULT ''"
         )
+    _seed_builtin_decision_models(connection)
     connection.commit()
+
+
+def _seed_builtin_decision_models(connection: sqlite3.Connection) -> None:
+    """Register built-in models once without overwriting future stored records."""
+    timestamp = utc_timestamp()
+    for model in BUILTIN_DECISION_MODELS:
+        connection.execute(
+            """
+            INSERT INTO decision_models (
+                id, version, name, short_name, description, prompts_json,
+                source_name, source_url, is_builtin, created_at, updated_at
+            ) VALUES (?, 1, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+            ON CONFLICT(id) DO NOTHING
+            """,
+            (
+                model["id"],
+                model["name"],
+                model["short_name"],
+                model["description"],
+                json.dumps(model["prompts"], ensure_ascii=False, separators=(",", ":")),
+                model["source_name"],
+                model["source_url"],
+                timestamp,
+                timestamp,
+            ),
+        )
 
 
 def create_conclusion(
@@ -240,6 +335,7 @@ def _replace_decision_analysis(
     analysis: Mapping[str, Any],
 ) -> None:
     """Replace one Conclusion's versioned decision analysis."""
+    _validate_decision_analysis(connection, analysis)
     connection.execute(
         "DELETE FROM decision_analyses WHERE conclusion_id = ?",
         (conclusion_id,),
@@ -257,6 +353,104 @@ def _replace_decision_analysis(
             json.dumps(analysis, ensure_ascii=False, separators=(",", ":")),
         ),
     )
+
+
+def _validate_decision_analysis(
+    connection: sqlite3.Connection,
+    analysis: Mapping[str, Any],
+) -> None:
+    """Ensure every analysis answer matches a registered immutable model version."""
+    for run in analysis.get("models", []):
+        model_id = run["model_id"]
+        model_version = run.get("model_version", 1)
+        row = connection.execute(
+            "SELECT version, prompts_json FROM decision_models WHERE id = ?",
+            (model_id,),
+        ).fetchone()
+        if row is None or int(row["version"]) != model_version:
+            raise UnknownDecisionModelError(
+                f"Unknown decision model version: {model_id}@{model_version}"
+            )
+        prompt_keys = {prompt["key"] for prompt in json.loads(row["prompts_json"])}
+        unknown_keys = set(run["answers"]) - prompt_keys
+        if unknown_keys:
+            raise UnknownDecisionModelError(
+                f"Unknown prompts for {model_id}: {', '.join(sorted(unknown_keys))}"
+            )
+
+
+def _serialize_decision_model(row: sqlite3.Row) -> dict[str, Any]:
+    record = dict(row)
+    record["prompts"] = json.loads(record.pop("prompts_json"))
+    record["is_builtin"] = bool(record["is_builtin"])
+    return record
+
+
+def list_decision_models(connection: sqlite3.Connection) -> dict[str, Any]:
+    """Return all registered decision models in stable creation order."""
+    rows = connection.execute(
+        """
+        SELECT *
+        FROM decision_models
+        ORDER BY CASE id
+            WHEN 'time-horizons' THEN 0
+            WHEN 'scenario-range' THEN 1
+            WHEN 'munger-checklist' THEN 2
+            ELSE 100
+        END, created_at, id
+        """
+    ).fetchall()
+    return {"count": len(rows), "items": [_serialize_decision_model(row) for row in rows]}
+
+
+def get_decision_model(
+    connection: sqlite3.Connection,
+    model_id: str,
+) -> dict[str, Any] | None:
+    """Return one registered decision model by stable ID."""
+    row = connection.execute(
+        "SELECT * FROM decision_models WHERE id = ?",
+        (model_id,),
+    ).fetchone()
+    return _serialize_decision_model(row) if row is not None else None
+
+
+def create_decision_model(
+    connection: sqlite3.Connection,
+    values: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Register one immutable version-one custom decision model."""
+    timestamp = utc_timestamp()
+    try:
+        connection.execute(
+            """
+            INSERT INTO decision_models (
+                id, version, name, short_name, description, prompts_json,
+                source_name, source_url, is_builtin, created_at, updated_at
+            ) VALUES (?, 1, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+            """,
+            (
+                values["id"],
+                values["name"],
+                values["short_name"],
+                values["description"],
+                json.dumps(values["prompts"], ensure_ascii=False, separators=(",", ":")),
+                values.get("source_name", ""),
+                values.get("source_url", ""),
+                timestamp,
+                timestamp,
+            ),
+        )
+    except sqlite3.IntegrityError as error:
+        if connection.execute(
+            "SELECT 1 FROM decision_models WHERE id = ?", (values["id"],)
+        ).fetchone():
+            raise DecisionModelAlreadyExistsError(values["id"]) from error
+        raise
+    record = get_decision_model(connection, values["id"])
+    if record is None:  # pragma: no cover - successful insert guarantees the row
+        raise RuntimeError("Created decision model could not be loaded")
+    return record
 
 
 def _records_with_tags(

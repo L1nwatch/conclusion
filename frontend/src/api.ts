@@ -3,6 +3,7 @@ import type {
   ConclusionListResponse,
   ConclusionRecord,
   ConclusionUpdateInput,
+  DecisionModelListResponse,
 } from './types'
 
 const apiBase = (import.meta.env.VITE_API_BASE ?? '').replace(/\/$/, '')
@@ -38,6 +39,10 @@ export function listConclusions(limit = 100): Promise<ConclusionListResponse> {
 
 export function getConclusion(id: number): Promise<ConclusionRecord> {
   return requestJson(`/api/conclusions/${id}`)
+}
+
+export function listDecisionModels(): Promise<DecisionModelListResponse> {
+  return requestJson('/api/decision-models')
 }
 
 export function createConclusion(payload: ConclusionInput): Promise<ConclusionRecord> {

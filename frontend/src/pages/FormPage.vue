@@ -2,7 +2,13 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
-import { ApiError, createConclusion, getConclusion, updateConclusion } from '../api'
+import {
+  ApiError,
+  createConclusion,
+  getConclusion,
+  listDecisionModels,
+  updateConclusion,
+} from '../api'
 import DecisionWorkbench from '../components/DecisionWorkbench.vue'
 import MarkdownField from '../components/MarkdownField.vue'
 import {
@@ -10,17 +16,18 @@ import {
   emptyDecisionAnalysis,
   hydrateDecisionAnalysis,
 } from '../decisionModels'
-import type { ConclusionInput, Confidence } from '../types'
+import type { ConclusionInput, Confidence, DecisionModelDefinition } from '../types'
 
 const route = useRoute()
 const router = useRouter()
 const isEdit = computed(() => route.name === 'edit')
 const conclusionId = computed(() => Number(route.params.id))
-const loading = ref(isEdit.value)
+const loading = ref(true)
 const saving = ref(false)
 const error = ref('')
 const conflict = ref(false)
 const expectedUpdatedAt = ref('')
+const decisionDefinitions = ref<DecisionModelDefinition[]>([])
 
 const form = reactive<ConclusionInput>({
   title: '',
@@ -32,7 +39,7 @@ const form = reactive<ConclusionInput>({
   category: '',
   tags: [],
   confidence: 'Medium',
-  decisionAnalysis: emptyDecisionAnalysis(),
+  decisionAnalysis: emptyDecisionAnalysis([]),
 })
 
 const confidenceOptions: Array<{ value: Confidence; label: string }> = [
@@ -51,16 +58,24 @@ function applyRecord(record: ConclusionInput & { updatedAt: string }) {
   form.category = record.category
   form.tags = [...record.tags]
   form.confidence = record.confidence
-  form.decisionAnalysis = hydrateDecisionAnalysis(record.decisionAnalysis)
+  form.decisionAnalysis = hydrateDecisionAnalysis(
+    record.decisionAnalysis,
+    decisionDefinitions.value,
+  )
   expectedUpdatedAt.value = record.updatedAt
 }
 
 async function load() {
-  if (!isEdit.value) return
   loading.value = true
   error.value = ''
   try {
-    applyRecord(await getConclusion(conclusionId.value))
+    const [modelResponse, record] = await Promise.all([
+      listDecisionModels(),
+      isEdit.value ? getConclusion(conclusionId.value) : Promise.resolve(null),
+    ])
+    decisionDefinitions.value = modelResponse.items
+    if (record) applyRecord(record)
+    else form.decisionAnalysis = emptyDecisionAnalysis(decisionDefinitions.value)
     conflict.value = false
   } catch (reason) {
     error.value = reason instanceof Error ? reason.message : '暂时无法读取结论'
@@ -212,7 +227,10 @@ onMounted(load)
           </label>
         </section>
 
-        <DecisionWorkbench v-model="form.decisionAnalysis" />
+        <DecisionWorkbench
+          v-model="form.decisionAnalysis"
+          :definitions="decisionDefinitions"
+        />
 
         <section class="decision-output">
           <header>

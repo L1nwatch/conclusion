@@ -79,7 +79,7 @@ SQLite 表结构、标签关系、搜索范围和删除语义见 [docs/data-mode
 - 情景边界：最好、最可能、最坏情况，以及保护措施
 - 芒格式多模型检查：激励、机会成本、反演、二阶效应、能力圈和反方证据
 
-它不是必须全部填写的长问卷。简单决定可以跳过，复杂决定只填写真正有帮助的模型。模型回答以版本化结构保存，而不是合并成 Markdown，因此网页和未来 MCP 都能逐项读取。模型来源、命名边界和扩展原则见 [docs/decision-models.md](docs/decision-models.md)。
+它不是必须全部填写的长问卷。简单决定可以跳过，复杂决定只填写真正有帮助的模型。模型定义保存在后端注册表，网页与未来 MCP 读取同一份数据；通过 API/MCP 新增自定义模型后，无需修改前端即可出现在决策工作台。模型回答以 `modelId + modelVersion + answers` 保存，而不是合并成 Markdown。模型来源、命名边界和扩展原则见 [docs/decision-models.md](docs/decision-models.md)。
 
 ## API
 
@@ -91,6 +91,9 @@ Available  POST   /api/conclusions
 Available  GET    /api/conclusions
 Available  GET    /api/conclusions/{id}
 Available  PATCH  /api/conclusions/{id}
+Available  POST   /api/decision-models
+Available  GET    /api/decision-models
+Available  GET    /api/decision-models/{id}
 Planned    DELETE /api/conclusions/{id}
 Planned    GET    /api/tags
 ```
@@ -182,8 +185,16 @@ MCP 由 FengDock 的统一 OAuth 服务对外提供。读取工具：
 
 - `create_conclusion`
 - `update_conclusion`
+- `create_decision_model`
+
+决策模型读取工具：
+
+- `list_decision_models`
+- `get_decision_model`
 
 Conclusion 的 `app/db.py` 提供可复用读写函数，FengDock 像加载 `vendor/fire/app/db.py` 一样加载它们。读取工具使用只读连接；写入工具使用普通事务连接，并通过 MCP annotations 明确标记副作用。MVP 暂不开放 `delete_conclusion`，删除仍在 UI 中由用户确认。
+
+模型更新暂不原地覆盖：历史 Conclusion 已引用具体 `modelVersion`，后续应以“创建新版本”实现 `update_decision_model`。完整工具契约和 AI 使用流程见 [docs/mcp-contract.md](docs/mcp-contract.md)。
 
 ## 暂时不做
 

@@ -11,14 +11,27 @@ from fastapi.staticfiles import StaticFiles
 
 from app.db import (
     ConclusionUpdateConflictError,
+    DecisionModelAlreadyExistsError,
+    UnknownDecisionModelError,
     connect,
     create_conclusion,
+    create_decision_model,
     get_conclusion,
+    get_decision_model,
     init_db,
     list_conclusions,
+    list_decision_models,
     update_conclusion,
 )
-from app.schemas import ConclusionCreate, ConclusionList, ConclusionRecord, ConclusionUpdate
+from app.schemas import (
+    ConclusionCreate,
+    ConclusionList,
+    ConclusionRecord,
+    ConclusionUpdate,
+    DecisionModelCreate,
+    DecisionModelList,
+    DecisionModelRecord,
+)
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -54,8 +67,48 @@ def create_app(
         tags=["conclusions"],
     )
     def post_conclusion(payload: ConclusionCreate) -> dict[str, object]:
-        with connect(database_path) as connection:
-            return create_conclusion(connection, payload.model_dump())
+        try:
+            with connect(database_path) as connection:
+                return create_conclusion(connection, payload.model_dump())
+        except UnknownDecisionModelError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+
+    @app.post(
+        "/api/decision-models",
+        response_model=DecisionModelRecord,
+        status_code=status.HTTP_201_CREATED,
+        tags=["decision-models"],
+    )
+    def post_decision_model(payload: DecisionModelCreate) -> dict[str, object]:
+        try:
+            with connect(database_path) as connection:
+                return create_decision_model(connection, payload.model_dump())
+        except DecisionModelAlreadyExistsError as error:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Decision model ID already exists",
+            ) from error
+
+    @app.get(
+        "/api/decision-models",
+        response_model=DecisionModelList,
+        tags=["decision-models"],
+    )
+    def get_decision_models() -> dict[str, object]:
+        with connect(database_path, read_only=True) as connection:
+            return list_decision_models(connection)
+
+    @app.get(
+        "/api/decision-models/{model_id}",
+        response_model=DecisionModelRecord,
+        tags=["decision-models"],
+    )
+    def get_decision_model_by_id(model_id: str) -> dict[str, object]:
+        with connect(database_path, read_only=True) as connection:
+            record = get_decision_model(connection, model_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail="Decision model not found")
+        return record
 
     @app.get(
         "/api/conclusions",
@@ -101,6 +154,8 @@ def create_app(
                     values,
                     expected_updated_at=payload.expected_updated_at,
                 )
+        except UnknownDecisionModelError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
         except ConclusionUpdateConflictError as error:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,

@@ -22,6 +22,10 @@
 18. 在 FengDock MCP 中加入 `get_conclusion`
 19. 在 FengDock MCP 中加入 `create_conclusion`
 20. 在 FengDock MCP 中加入 `update_conclusion`
+21. 在 FengDock MCP 中加入 `list_decision_models`
+22. 在 FengDock MCP 中加入 `get_decision_model`
+23. 在 FengDock MCP 中加入 `create_decision_model`
+24. 实现不可变模型版本历史，再加入 `update_decision_model`
 
 ## 每个提交的完成条件
 

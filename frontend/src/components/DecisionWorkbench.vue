@@ -1,24 +1,27 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { decisionModels, type DecisionModelId } from '../decisionModels'
-import type { DecisionAnalysis, DecisionModelRun } from '../types'
+import type {
+  DecisionAnalysis,
+  DecisionModelDefinition,
+  DecisionModelRun,
+} from '../types'
 
+defineProps<{ definitions: DecisionModelDefinition[] }>()
 const model = defineModel<DecisionAnalysis>({ required: true })
-const openModels = ref<DecisionModelId[]>(['time-horizons'])
+const openModels = ref<string[]>(['time-horizons'])
 
-function runFor(modelId: DecisionModelId): DecisionModelRun {
+function runFor(modelId: string): DecisionModelRun {
   const run = model.value.models.find((item) => item.modelId === modelId)
   if (!run) throw new Error(`Missing decision model: ${modelId}`)
   return run
 }
 
-function answerFor(modelId: DecisionModelId, key: string): string {
-  return (runFor(modelId).answers as unknown as Record<string, string>)[key] ?? ''
+function answerFor(modelId: string, key: string): string {
+  return runFor(modelId).answers[key] ?? ''
 }
 
-function setAnswer(modelId: DecisionModelId, key: string, value: string) {
-  const answers = runFor(modelId).answers as unknown as Record<string, string>
-  answers[key] = value
+function setAnswer(modelId: string, key: string, value: string) {
+  runFor(modelId).answers[key] = value
 }
 
 const answeredCount = computed(() =>
@@ -29,7 +32,7 @@ const answeredCount = computed(() =>
   ),
 )
 
-function modelAnswerCount(modelId: DecisionModelId) {
+function modelAnswerCount(modelId: string) {
   return Object.values(runFor(modelId).answers).filter((answer) => answer.trim()).length
 }
 </script>
@@ -47,7 +50,7 @@ function modelAnswerCount(modelId: DecisionModelId) {
 
     <el-collapse v-model="openModels" class="model-collapse">
       <el-collapse-item
-        v-for="definition in decisionModels"
+        v-for="definition in definitions"
         :key="definition.id"
         :name="definition.id"
       >

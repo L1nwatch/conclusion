@@ -1,32 +1,35 @@
 export type Confidence = 'High' | 'Medium' | 'Low'
 
-export interface TimeHorizonAnswers {
-  tenHours: string
-  tenDays: string
-  tenMonths: string
-  tenYears: string
+export interface DecisionPrompt {
+  key: string
+  label: string
+  placeholder: string
 }
 
-export interface ScenarioAnswers {
-  bestCase: string
-  likelyCase: string
-  worstCase: string
-  safeguards: string
+export interface DecisionModelDefinition {
+  id: string
+  version: number
+  name: string
+  shortName: string
+  description: string
+  prompts: DecisionPrompt[]
+  sourceName: string
+  sourceUrl: string
+  isBuiltin: boolean
+  createdAt: string
+  updatedAt: string
 }
 
-export interface MungerChecklistAnswers {
-  incentives: string
-  opportunityCost: string
-  inversion: string
-  secondOrderEffects: string
-  circleOfCompetence: string
-  disconfirmingEvidence: string
+export interface DecisionModelListResponse {
+  count: number
+  items: DecisionModelDefinition[]
 }
 
-export type DecisionModelRun =
-  | { modelId: 'time-horizons'; answers: TimeHorizonAnswers }
-  | { modelId: 'scenario-range'; answers: ScenarioAnswers }
-  | { modelId: 'munger-checklist'; answers: MungerChecklistAnswers }
+export interface DecisionModelRun {
+  modelId: string
+  modelVersion: number
+  answers: Record<string, string>
+}
 
 export interface DecisionAnalysis {
   version: 1

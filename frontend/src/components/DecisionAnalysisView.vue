@@ -1,22 +1,33 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { decisionModels } from '../decisionModels'
-import type { DecisionAnalysis, DecisionModelRun } from '../types'
+import type {
+  DecisionAnalysis,
+  DecisionModelDefinition,
+  DecisionModelRun,
+} from '../types'
 
-const props = defineProps<{ analysis: DecisionAnalysis }>()
+const props = defineProps<{
+  analysis: DecisionAnalysis
+  definitions: DecisionModelDefinition[]
+}>()
 
 const visibleModels = computed(() =>
   props.analysis.models
     .map((run) => ({
       run,
-      definition: decisionModels.find((definition) => definition.id === run.modelId),
+      definition: props.definitions.find(
+        (definition) =>
+          definition.id === run.modelId && definition.version === run.modelVersion,
+      ),
     }))
     .filter((item) => item.definition),
 )
 
 function visibleAnswers(run: DecisionModelRun) {
-  const definition = decisionModels.find((item) => item.id === run.modelId)
-  const answers = run.answers as unknown as Record<string, string>
+  const definition = props.definitions.find(
+    (item) => item.id === run.modelId && item.version === run.modelVersion,
+  )
+  const answers = run.answers
   return (definition?.prompts ?? [])
     .map((prompt) => ({ ...prompt, answer: answers[prompt.key] ?? '' }))
     .filter((item) => item.answer.trim())

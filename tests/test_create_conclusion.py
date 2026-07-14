@@ -27,6 +27,7 @@ VALID_PAYLOAD = {
         "models": [
             {
                 "modelId": "time-horizons",
+                "modelVersion": 1,
                 "answers": {
                     "tenHours": "No meaningful difference.",
                     "tenDays": "The urge will probably fade.",
@@ -36,6 +37,7 @@ VALID_PAYLOAD = {
             },
             {
                 "modelId": "munger-checklist",
+                "modelVersion": 1,
                 "answers": {
                     "incentives": "The sale creates artificial urgency.",
                     "opportunityCost": "Keep the budget for a higher-impact upgrade.",

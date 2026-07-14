@@ -1,22 +1,28 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getConclusion } from '../api'
+import { getConclusion, listDecisionModels } from '../api'
 import DecisionAnalysisView from '../components/DecisionAnalysisView.vue'
 import MarkdownContent from '../components/MarkdownContent.vue'
-import type { ConclusionRecord } from '../types'
+import type { ConclusionRecord, DecisionModelDefinition } from '../types'
 
 const route = useRoute()
 const router = useRouter()
 const record = ref<ConclusionRecord | null>(null)
 const loading = ref(true)
 const error = ref('')
+const decisionDefinitions = ref<DecisionModelDefinition[]>([])
 
 async function load() {
   loading.value = true
   error.value = ''
   try {
-    record.value = await getConclusion(Number(route.params.id))
+    const [conclusion, modelResponse] = await Promise.all([
+      getConclusion(Number(route.params.id)),
+      listDecisionModels(),
+    ])
+    record.value = conclusion
+    decisionDefinitions.value = modelResponse.items
   } catch (reason) {
     error.value = reason instanceof Error ? reason.message : '暂时无法读取结论'
   } finally {
@@ -89,7 +95,10 @@ onMounted(load)
         <p>{{ record.question }}</p>
       </section>
 
-      <DecisionAnalysisView :analysis="record.decisionAnalysis" />
+      <DecisionAnalysisView
+        :analysis="record.decisionAnalysis"
+        :definitions="decisionDefinitions"
+      />
 
       <section class="detail-section reason-section">
         <p class="section-kicker">为什么</p>

@@ -46,103 +46,124 @@ def _validate_and_deduplicate_tags(tags: list[str]) -> list[str]:
     return unique
 
 
-class DecisionAnswers(BaseModel):
-    """Shared normalization for free-text decision model answers."""
+MODEL_ID_PATTERN = r"^[a-z0-9][a-z0-9-]{1,63}$"
+PROMPT_KEY_PATTERN = r"^[a-z][a-zA-Z0-9]{0,63}$"
 
-    model_config = ConfigDict(populate_by_name=True)
 
-    @field_validator("*", mode="before")
+class DecisionPrompt(BaseModel):
+    """One stable prompt in a reusable decision model."""
+
+    key: str = Field(min_length=1, max_length=64, pattern=PROMPT_KEY_PATTERN)
+    label: str = Field(min_length=1, max_length=120)
+    placeholder: str = Field(default="", max_length=280)
+
+    @field_validator("key", "label", "placeholder", mode="before")
     @classmethod
-    def strip_answers(cls, value: object) -> object:
+    def strip_text(cls, value: object) -> object:
         return _strip_outer_whitespace(value)
 
 
-class TimeHorizonAnswers(DecisionAnswers):
-    ten_hours: str = Field(default="", alias="tenHours", max_length=4_000)
-    ten_days: str = Field(default="", alias="tenDays", max_length=4_000)
-    ten_months: str = Field(default="", alias="tenMonths", max_length=4_000)
-    ten_years: str = Field(default="", alias="tenYears", max_length=4_000)
+class DecisionModelCreate(BaseModel):
+    """Immutable version-one definition accepted for a new decision model."""
 
-
-class ScenarioAnswers(DecisionAnswers):
-    best_case: str = Field(default="", alias="bestCase", max_length=4_000)
-    likely_case: str = Field(default="", alias="likelyCase", max_length=4_000)
-    worst_case: str = Field(default="", alias="worstCase", max_length=4_000)
-    safeguards: str = Field(default="", max_length=4_000)
-
-
-class MungerChecklistAnswers(DecisionAnswers):
-    incentives: str = Field(default="", max_length=4_000)
-    opportunity_cost: str = Field(default="", alias="opportunityCost", max_length=4_000)
-    inversion: str = Field(default="", max_length=4_000)
-    second_order_effects: str = Field(
-        default="",
-        alias="secondOrderEffects",
-        max_length=4_000,
-    )
-    circle_of_competence: str = Field(
-        default="",
-        alias="circleOfCompetence",
-        max_length=4_000,
-    )
-    disconfirming_evidence: str = Field(
-        default="",
-        alias="disconfirmingEvidence",
-        max_length=4_000,
-    )
-
-
-class TimeHorizonModel(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    model_id: Literal["time-horizons"] = Field(alias="modelId")
-    answers: TimeHorizonAnswers
+    id: str = Field(min_length=2, max_length=64, pattern=MODEL_ID_PATTERN)
+    name: str = Field(min_length=1, max_length=120)
+    short_name: str = Field(alias="shortName", min_length=1, max_length=80)
+    description: str = Field(min_length=1, max_length=500)
+    prompts: list[DecisionPrompt] = Field(min_length=1, max_length=20)
+    source_name: str = Field(default="", alias="sourceName", max_length=160)
+    source_url: str = Field(default="", alias="sourceUrl", max_length=2_000)
 
-    @model_validator(mode="after")
-    def require_answer(self) -> "TimeHorizonModel":
-        if not any(self.answers.model_dump().values()):
-            raise ValueError("a decision model must contain at least one answer")
-        return self
+    @field_validator(
+        "id",
+        "name",
+        "short_name",
+        "description",
+        "source_name",
+        "source_url",
+        mode="before",
+    )
+    @classmethod
+    def strip_text(cls, value: object) -> object:
+        return _strip_outer_whitespace(value)
+
+    @field_validator("prompts")
+    @classmethod
+    def require_unique_prompt_keys(cls, prompts: list[DecisionPrompt]) -> list[DecisionPrompt]:
+        keys = [prompt.key for prompt in prompts]
+        if len(keys) != len(set(keys)):
+            raise ValueError("decision model prompt keys must be unique")
+        return prompts
+
+    @field_validator("source_url")
+    @classmethod
+    def require_https_source(cls, value: str) -> str:
+        if value and not value.startswith("https://"):
+            raise ValueError("sourceUrl must use https")
+        return value
 
 
-class ScenarioModel(BaseModel):
+class DecisionModelRecord(DecisionModelCreate):
+    """Stored decision model returned by the API."""
+
     model_config = ConfigDict(populate_by_name=True)
 
-    model_id: Literal["scenario-range"] = Field(alias="modelId")
-    answers: ScenarioAnswers
-
-    @model_validator(mode="after")
-    def require_answer(self) -> "ScenarioModel":
-        if not any(self.answers.model_dump().values()):
-            raise ValueError("a decision model must contain at least one answer")
-        return self
+    version: Literal[1] = 1
+    is_builtin: bool = Field(alias="isBuiltin")
+    created_at: datetime = Field(alias="createdAt")
+    updated_at: datetime = Field(alias="updatedAt")
 
 
-class MungerChecklistModel(BaseModel):
+class DecisionModelList(BaseModel):
+    count: int
+    items: list[DecisionModelRecord]
+
+
+class DecisionModelRun(BaseModel):
+    """Answers produced with one specific version of a registered model."""
+
     model_config = ConfigDict(populate_by_name=True)
 
-    model_id: Literal["munger-checklist"] = Field(alias="modelId")
-    answers: MungerChecklistAnswers
+    model_id: str = Field(alias="modelId", min_length=2, max_length=64, pattern=MODEL_ID_PATTERN)
+    model_version: int = Field(default=1, alias="modelVersion", ge=1)
+    answers: dict[str, str] = Field(min_length=1, max_length=20)
 
-    @model_validator(mode="after")
-    def require_answer(self) -> "MungerChecklistModel":
-        if not any(self.answers.model_dump().values()):
-            raise ValueError("a decision model must contain at least one answer")
-        return self
+    @field_validator("answers", mode="before")
+    @classmethod
+    def normalize_answers(cls, value: object) -> object:
+        if not isinstance(value, dict):
+            return value
+        return {
+            key.strip() if isinstance(key, str) else key: answer.strip()
+            if isinstance(answer, str)
+            else answer
+            for key, answer in value.items()
+        }
 
-
-DecisionModel = TimeHorizonModel | ScenarioModel | MungerChecklistModel
+    @field_validator("answers")
+    @classmethod
+    def validate_answers(cls, answers: dict[str, str]) -> dict[str, str]:
+        for key, answer in answers.items():
+            if not key or len(key) > 64 or not key[0].islower() or not key.isalnum():
+                raise ValueError("decision answer keys must be lower camel case alphanumeric")
+            if not answer:
+                raise ValueError("decision answers must not be blank")
+            if len(answer) > 4_000:
+                raise ValueError("decision answers must not exceed 4000 characters")
+        return answers
 
 
 class DecisionAnalysis(BaseModel):
     """Versioned, structured reasoning completed before the final conclusion."""
 
     version: Literal[1] = 1
-    models: list[DecisionModel] = Field(default_factory=list, max_length=3)
+    models: list[DecisionModelRun] = Field(default_factory=list, max_length=20)
 
     @field_validator("models")
     @classmethod
-    def require_unique_models(cls, models: list[DecisionModel]) -> list[DecisionModel]:
+    def require_unique_models(cls, models: list[DecisionModelRun]) -> list[DecisionModelRun]:
         model_ids = [model.model_id for model in models]
         if len(model_ids) != len(set(model_ids)):
             raise ValueError("decision models must be unique")
