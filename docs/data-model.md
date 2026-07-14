@@ -57,7 +57,7 @@ JSON 顶层包含 `version` 和 `models`。每次模型运行保存稳定的 `mo
 | `created_at` | `TEXT` | UTC ISO 8601 |
 | `updated_at` | `TEXT` | UTC ISO 8601；当前不可变版本与创建时间相同 |
 
-应用初始化时以 `INSERT ... ON CONFLICT DO NOTHING` 注册三个内置模型，不覆盖数据库中已有定义。MVP 支持列表、详情和创建，不支持覆盖或删除；模型修订将在后续通过新增版本完成。
+应用初始化时以 `INSERT ... ON CONFLICT DO NOTHING` 注册七个内置模型，不覆盖数据库中已有定义。MVP 支持列表、详情和创建，不支持覆盖或删除；模型修订将在后续通过新增版本完成。
 
 ## Markdown 和图片
 

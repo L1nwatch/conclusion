@@ -11,20 +11,20 @@ from app.main import create_app
 
 
 CUSTOM_MODEL = {
-    "id": "reversibility",
-    "name": "可逆性检查",
-    "shortName": "ONE-WAY · TWO-WAY",
-    "description": "判断决定是否容易撤销，以及现在真正需要投入多少分析。",
+    "id": "constraint-check",
+    "name": "约束检查",
+    "shortName": "CONSTRAINTS",
+    "description": "找出决定必须满足的硬约束。",
     "prompts": [
         {
-            "key": "reversible",
-            "label": "是否可逆",
-            "placeholder": "如果判断错了，能否低成本返回？",
+            "key": "hardConstraints",
+            "label": "硬约束",
+            "placeholder": "哪些条件绝对不能违反？",
         },
         {
-            "key": "exitCost",
-            "label": "退出成本",
-            "placeholder": "撤销决定需要付出什么？",
+            "key": "bottleneck",
+            "label": "瓶颈",
+            "placeholder": "哪个约束最先限制结果？",
         },
     ],
     "sourceName": "",
@@ -47,14 +47,19 @@ def test_list_and_get_builtin_decision_models(tmp_path: Path) -> None:
     with TestClient(create_app(tmp_path / "conclusion.sqlite3")) as client:
         listed = client.get("/api/decision-models")
         fetched = client.get("/api/decision-models/time-horizons")
+        munger = client.get("/api/decision-models/munger-checklist")
 
     assert listed.status_code == 200
     body = listed.json()
-    assert body["count"] == 3
+    assert body["count"] == 7
     assert [item["id"] for item in body["items"]] == [
-        "time-horizons",
-        "scenario-range",
+        "precedent-review",
         "munger-checklist",
+        "scenario-range",
+        "time-horizons",
+        "inversion",
+        "inaction-value",
+        "reversibility",
     ]
     assert all(item["version"] == 1 and item["isBuiltin"] for item in body["items"])
     assert fetched.status_code == 200
@@ -63,6 +68,18 @@ def test_list_and_get_builtin_decision_models(tmp_path: Path) -> None:
         "tenDays",
         "tenMonths",
         "tenYears",
+    ]
+    assert [prompt["key"] for prompt in munger.json()["prompts"]] == [
+        "risk",
+        "independence",
+        "preparation",
+        "humility",
+        "rigor",
+        "allocation",
+        "patience",
+        "decisiveness",
+        "change",
+        "focus",
     ]
 
 
@@ -75,11 +92,11 @@ def test_create_custom_model_and_use_it_in_conclusion(tmp_path: Path) -> None:
                 "version": 1,
                 "models": [
                     {
-                        "modelId": "reversibility",
+                        "modelId": "constraint-check",
                         "modelVersion": 1,
                         "answers": {
-                            "reversible": "Yes, the pilot can be stopped after one week.",
-                            "exitCost": "Only a few hours of setup time.",
+                            "hardConstraints": "Stay within the weekly time budget.",
+                            "bottleneck": "Available focus time.",
                         },
                     }
                 ],
@@ -98,7 +115,7 @@ def test_create_custom_model_and_use_it_in_conclusion(tmp_path: Path) -> None:
     }
     assert conclusion.status_code == 201
     assert conclusion.json()["decisionAnalysis"] == payload["decisionAnalysis"]
-    assert listed.json()["count"] == 4
+    assert listed.json()["count"] == 8
 
 
 def test_create_decision_model_rejects_duplicate_id(tmp_path: Path) -> None:

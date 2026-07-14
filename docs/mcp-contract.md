@@ -34,11 +34,12 @@ MVP 不提供 `delete_decision_model`。
 ## 推荐 AI 工作流
 
 1. 调用 `list_decision_models`，根据问题复杂度选择少量相关模型。
-2. 调用 `get_decision_model` 读取每个模型的具体问题。
-3. 使用用户提供的信息逐项推演；信息不足时明确标记假设，不虚构事实。
-4. 把核心决定压缩成不超过 280 字符的 `conclusion`。
-5. 把关键理由整理成 `reason`，把原始模型回答写入 `decisionAnalysis`。
-6. 调用 `create_conclusion` 或带 `expectedUpdatedAt` 的 `update_conclusion`。
+2. 如果选择 `precedent-review`，先调用 `search_conclusions`；没有相关记录就明确写“暂无先例”，不要编造经验。
+3. 调用 `get_decision_model` 读取每个模型的具体问题。
+4. 使用用户提供的信息逐项推演；信息不足时明确标记假设，不虚构事实。
+5. 把核心决定压缩成不超过 280 字符的 `conclusion`。
+6. 把关键理由整理成 `reason`，把原始模型回答写入 `decisionAnalysis`。
+7. 调用 `create_conclusion` 或带 `expectedUpdatedAt` 的 `update_conclusion`。
 
 `decisionAnalysis.models[]` 写入格式：
 

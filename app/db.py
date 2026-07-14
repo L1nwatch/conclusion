@@ -17,9 +17,57 @@ DATABASE_PATH_ENV = "CONCLUSION_DATABASE_PATH"
 BUSY_TIMEOUT_MS = 5_000
 BUILTIN_DECISION_MODELS = (
     {
+        "id": "precedent-review",
+        "name": "经验之谈",
+        "short_name": "PAST DECISIONS",
+        "description": "先查已有 Conclusion，分清可复用的经验和这次问题的关键差异。",
+        "prompts": [
+            {"key": "relatedConclusions", "label": "相关结论", "placeholder": "有哪些相似 Conclusion？写下 ID、标题或链接。"},
+            {"key": "sharedPattern", "label": "共同规律", "placeholder": "过去反复出现了什么模式或经验？"},
+            {"key": "keyDifferences", "label": "关键差异", "placeholder": "这一次有什么不同，不能直接照搬？"},
+            {"key": "transferableLesson", "label": "可复用原则", "placeholder": "最终可以迁移到这次决定的原则是什么？"},
+        ],
+        "source_name": "",
+        "source_url": "",
+    },
+    {
+        "id": "munger-checklist",
+        "name": "穷查理原则检查",
+        "short_name": "POOR CHARLIE CHECK",
+        "description": "按风险、独立判断、准备、谦逊、耐心等主题，检查决定中的明显遗漏。",
+        "prompts": [
+            {"key": "risk", "label": "风险", "placeholder": "永久损失、声誉损害或无法承受的结果是什么？"},
+            {"key": "independence", "label": "独立判断", "placeholder": "判断来自事实，还是共识、权威或情绪？"},
+            {"key": "preparation", "label": "准备", "placeholder": "关键事实是否准备充分？还缺什么信息？"},
+            {"key": "humility", "label": "谦逊", "placeholder": "哪些超出能力圈？自己最可能错在哪里？"},
+            {"key": "rigor", "label": "严格分析", "placeholder": "是否混淆了价格与价值、忙碌与进展？"},
+            {"key": "allocation", "label": "资源配置", "placeholder": "相对其他选择，这是时间和资金的最佳用途吗？"},
+            {"key": "patience", "label": "耐心", "placeholder": "真的需要现在行动吗？等待能换来什么？"},
+            {"key": "decisiveness", "label": "果断", "placeholder": "如果条件已经满足，还在因为什么拖延？"},
+            {"key": "change", "label": "适应变化", "placeholder": "哪些关键事实已经变化，或可能让结论失效？"},
+            {"key": "focus", "label": "专注", "placeholder": "真正决定结果的一两个变量是什么？"},
+        ],
+        "source_name": "Poor Charlie's Almanack — Investment Principles Checklist (adapted)",
+        "source_url": "https://www.poorcharliesalmanack.com/",
+    },
+    {
+        "id": "scenario-range",
+        "name": "极端思考",
+        "short_name": "BEST · BASE · WORST",
+        "description": "同时看到最好、最可能和最坏结果，以及可以保留的退路。",
+        "prompts": [
+            {"key": "bestCase", "label": "最好情况", "placeholder": "合理范围内，最好会发生什么？"},
+            {"key": "likelyCase", "label": "最可能情况", "placeholder": "不乐观也不悲观，最可能怎样？"},
+            {"key": "worstCase", "label": "最坏情况", "placeholder": "合理的最坏结果是什么？"},
+            {"key": "safeguards", "label": "保护措施", "placeholder": "如何降低损失，或者保留退路？"},
+        ],
+        "source_name": "",
+        "source_url": "",
+    },
+    {
         "id": "time-horizons",
         "name": "时间尺度",
-        "short_name": "10H · 10D · 10M · 10Y",
+        "short_name": "10H → 10Y",
         "description": "把眼前情绪拉远，观察这个决定在不同时间尺度上的影响。",
         "prompts": [
             {"key": "tenHours", "label": "10 小时后", "placeholder": "今天晚些时候，我会怎么看？"},
@@ -31,34 +79,46 @@ BUILTIN_DECISION_MODELS = (
         "source_url": "https://suzywelch.com/books/",
     },
     {
-        "id": "scenario-range",
-        "name": "情景边界",
-        "short_name": "BEST · LIKELY · WORST",
-        "description": "同时看到上行空间、最可能结果和可以承受的下行风险。",
+        "id": "inversion",
+        "name": "逆向思考",
+        "short_name": "HOW TO FAIL",
+        "description": "从“怎样一定搞砸”倒推失败路径，再提前切断关键原因。",
         "prompts": [
-            {"key": "bestCase", "label": "最好情况", "placeholder": "合理范围内，最好会发生什么？"},
-            {"key": "likelyCase", "label": "最可能情况", "placeholder": "不乐观也不悲观，最可能怎样？"},
-            {"key": "worstCase", "label": "最坏情况", "placeholder": "合理的最坏结果是什么？"},
-            {"key": "safeguards", "label": "保护措施", "placeholder": "如何降低损失，或者保留退路？"},
+            {"key": "failureGoal", "label": "确保失败", "placeholder": "如果目标是把它搞砸，我会怎么做？"},
+            {"key": "failureCauses", "label": "失败路径", "placeholder": "哪些行为或条件会一步步导致失败？"},
+            {"key": "currentExposure", "label": "当前暴露", "placeholder": "现在已经踩中了哪些失败条件？"},
+            {"key": "prevention", "label": "提前切断", "placeholder": "最先应该消除哪个原因？"},
         ],
         "source_name": "",
         "source_url": "",
     },
     {
-        "id": "munger-checklist",
-        "name": "芒格式多模型检查",
-        "short_name": "LATTICEWORK CHECK",
-        "description": "受多模型思维启发，从激励、反演和认知盲点检查遗漏。",
+        "id": "inaction-value",
+        "name": "不行动分析",
+        "short_name": "WHAT IF NOT",
+        "description": "把“不做”也当作一个选项，比较避免的成本和错失的价值。",
         "prompts": [
-            {"key": "incentives", "label": "激励", "placeholder": "谁希望我做什么？各方真实激励是什么？"},
-            {"key": "opportunityCost", "label": "机会成本", "placeholder": "选择它，就放弃了什么更好的用途？"},
-            {"key": "inversion", "label": "反演", "placeholder": "怎样做几乎一定会失败？现在是否正在这样做？"},
-            {"key": "secondOrderEffects", "label": "二阶效应", "placeholder": "然后呢？这个结果还会继续导致什么？"},
-            {"key": "circleOfCompetence", "label": "能力圈", "placeholder": "我真正知道什么？哪些只是在猜？"},
-            {"key": "disconfirmingEvidence", "label": "反方证据", "placeholder": "什么事实会证明我错了？我是否主动找过？"},
+            {"key": "statusQuo", "label": "保持现状", "placeholder": "如果什么都不做，接下来会怎样？"},
+            {"key": "avoidedCost", "label": "避免的成本", "placeholder": "不行动可以避免哪些时间、金钱或风险？"},
+            {"key": "missedValue", "label": "错失的价值", "placeholder": "不行动会失去什么机会或长期价值？"},
+            {"key": "actionTrigger", "label": "行动触发点", "placeholder": "出现什么条件时，就不应继续等待？"},
         ],
-        "source_name": "Charlie Munger — Elementary Worldly Wisdom",
-        "source_url": "https://www.ivey.uwo.ca/media/2975916/the-best-of-charlie-munger-1994-2011.pdf",
+        "source_name": "",
+        "source_url": "",
+    },
+    {
+        "id": "reversibility",
+        "name": "可逆性判断",
+        "short_name": "ONE-WAY · TWO-WAY",
+        "description": "判断决定能否低成本撤回，并优先设计最小可逆试验。",
+        "prompts": [
+            {"key": "doorType", "label": "单向还是双向", "placeholder": "做错后能否轻易返回？为什么？"},
+            {"key": "exitCost", "label": "退出成本", "placeholder": "撤销决定需要付出什么时间、金钱或信誉？"},
+            {"key": "smallExperiment", "label": "最小试验", "placeholder": "能否先做一个更小、更便宜、可撤回的版本？"},
+            {"key": "decisionSpeed", "label": "投入程度", "placeholder": "它值得深思，还是应该快速试验？"},
+        ],
+        "source_name": "",
+        "source_url": "",
     },
 )
 UPDATE_FIELDS = (
@@ -393,9 +453,13 @@ def list_decision_models(connection: sqlite3.Connection) -> dict[str, Any]:
         SELECT *
         FROM decision_models
         ORDER BY CASE id
-            WHEN 'time-horizons' THEN 0
-            WHEN 'scenario-range' THEN 1
-            WHEN 'munger-checklist' THEN 2
+            WHEN 'precedent-review' THEN 0
+            WHEN 'munger-checklist' THEN 1
+            WHEN 'scenario-range' THEN 2
+            WHEN 'time-horizons' THEN 3
+            WHEN 'inversion' THEN 4
+            WHEN 'inaction-value' THEN 5
+            WHEN 'reversibility' THEN 6
             ELSE 100
         END, created_at, id
         """

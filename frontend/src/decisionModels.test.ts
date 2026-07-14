@@ -7,14 +7,14 @@ import {
 import type { DecisionModelDefinition } from './types'
 
 const definition: DecisionModelDefinition = {
-  id: 'reversibility',
+  id: 'constraint-check',
   version: 1,
-  name: '可逆性检查',
-  shortName: 'ONE-WAY · TWO-WAY',
-  description: '判断决定是否容易撤销。',
+  name: '约束检查',
+  shortName: 'CONSTRAINTS',
+  description: '找出决定必须满足的硬约束。',
   prompts: [
-    { key: 'reversible', label: '是否可逆', placeholder: '' },
-    { key: 'exitCost', label: '退出成本', placeholder: '' },
+    { key: 'hardConstraints', label: '硬约束', placeholder: '' },
+    { key: 'bottleneck', label: '瓶颈', placeholder: '' },
   ],
   sourceName: '',
   sourceUrl: '',
@@ -29,9 +29,9 @@ describe('dynamic decision model analysis', () => {
       version: 1,
       models: [
         {
-          modelId: 'reversibility',
+          modelId: 'constraint-check',
           modelVersion: 1,
-          answers: { reversible: '', exitCost: '' },
+          answers: { hardConstraints: '', bottleneck: '' },
         },
       ],
     })
@@ -43,9 +43,9 @@ describe('dynamic decision model analysis', () => {
         version: 1,
         models: [
           {
-            modelId: 'reversibility',
+            modelId: 'constraint-check',
             modelVersion: 1,
-            answers: { reversible: '可以撤销' },
+            answers: { hardConstraints: '不能超出每周时间预算' },
           },
         ],
       },
@@ -53,16 +53,16 @@ describe('dynamic decision model analysis', () => {
     )
 
     expect(hydrated.models[0]?.answers).toEqual({
-      reversible: '可以撤销',
-      exitCost: '',
+      hardConstraints: '不能超出每周时间预算',
+      bottleneck: '',
     })
     expect(compactDecisionAnalysis(hydrated)).toEqual({
       version: 1,
       models: [
         {
-          modelId: 'reversibility',
+          modelId: 'constraint-check',
           modelVersion: 1,
-          answers: { reversible: '可以撤销' },
+          answers: { hardConstraints: '不能超出每周时间预算' },
         },
       ],
     })

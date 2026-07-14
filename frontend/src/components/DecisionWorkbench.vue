@@ -8,7 +8,7 @@ import type {
 
 defineProps<{ definitions: DecisionModelDefinition[] }>()
 const model = defineModel<DecisionAnalysis>({ required: true })
-const openModels = ref<string[]>(['time-horizons'])
+const openModels = ref<string[]>(['precedent-review'])
 
 function runFor(modelId: string): DecisionModelRun {
   const run = model.value.models.find((item) => item.modelId === modelId)
