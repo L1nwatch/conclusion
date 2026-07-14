@@ -48,3 +48,10 @@ class ConclusionRecord(ConclusionCreate):
     created_at: datetime = Field(alias="createdAt")
     updated_at: datetime = Field(alias="updatedAt")
 
+
+class ConclusionList(BaseModel):
+    """Bounded list response with total result metadata."""
+
+    count: int
+    returned: int
+    items: list[ConclusionRecord]

@@ -133,3 +133,38 @@ def create_conclusion(
     if row is None:  # pragma: no cover - SQLite guarantees lastrowid for this insert
         raise RuntimeError("Created Conclusion could not be loaded")
     return dict(row)
+
+
+def list_conclusions(
+    connection: sqlite3.Connection,
+    *,
+    limit: int = 50,
+) -> dict[str, Any]:
+    """Return a bounded page of Conclusions, newest first."""
+    total = connection.execute("SELECT count(*) FROM conclusions").fetchone()[0]
+    rows = connection.execute(
+        """
+        SELECT *
+        FROM conclusions
+        ORDER BY updated_at DESC, id DESC
+        LIMIT ?
+        """,
+        (limit,),
+    ).fetchall()
+    return {
+        "count": total,
+        "returned": len(rows),
+        "items": [dict(row) for row in rows],
+    }
+
+
+def get_conclusion(
+    connection: sqlite3.Connection,
+    conclusion_id: int,
+) -> dict[str, Any] | None:
+    """Return one Conclusion by ID, or None when it does not exist."""
+    row = connection.execute(
+        "SELECT * FROM conclusions WHERE id = ?",
+        (conclusion_id,),
+    ).fetchone()
+    return dict(row) if row is not None else None

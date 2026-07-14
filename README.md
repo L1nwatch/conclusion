@@ -2,7 +2,7 @@
 
 Conclusion 是一个个人决策知识库，用来保存“已经想清楚的最终结论”。当自己或 AI 再次遇到相似问题时，可以直接复用已有决定、理由、取舍和适用条件，而不是从聊天记录中重新寻找或再次分析。
 
-> 当前状态：后端骨架、SQLite schema 和新增 Conclusion API 已建立；列表、详情、编辑、删除、标签和 UI 尚未实现。
+> 当前状态：后端已支持新增、列表和详情；编辑、删除、标签、搜索和 UI 尚未实现。
 
 ## Screenshots
 
@@ -60,8 +60,8 @@ SQLite 表结构、标签关系、搜索范围和删除语义见 [docs/data-mode
 ```text
 Available  GET    /api/health
 Available  POST   /api/conclusions
-Planned    GET    /api/conclusions
-Planned    GET    /api/conclusions/{id}
+Available  GET    /api/conclusions
+Available  GET    /api/conclusions/{id}
 Planned    PATCH  /api/conclusions/{id}
 Planned    DELETE /api/conclusions/{id}
 Planned    GET    /api/tags
