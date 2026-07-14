@@ -5,8 +5,9 @@ from __future__ import annotations
 import os
 import sqlite3
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterator
+from typing import Any, Iterator, Mapping
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -93,3 +94,42 @@ def init_db(connection: sqlite3.Connection) -> None:
         """
     )
     connection.commit()
+
+
+def create_conclusion(
+    connection: sqlite3.Connection,
+    values: Mapping[str, str],
+) -> dict[str, Any]:
+    """Insert and return one Conclusion inside the caller's transaction."""
+    timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    parameters = {
+        "title": values["title"],
+        "question": values["question"],
+        "conclusion": values["conclusion"],
+        "reason": values["reason"],
+        "tradeoffs": values.get("tradeoffs", ""),
+        "category": values["category"],
+        "confidence": values["confidence"],
+        "created_at": timestamp,
+        "updated_at": timestamp,
+    }
+    cursor = connection.execute(
+        """
+        INSERT INTO conclusions (
+            title, question, conclusion, reason, tradeoffs,
+            category, confidence, created_at, updated_at
+        )
+        VALUES (
+            :title, :question, :conclusion, :reason, :tradeoffs,
+            :category, :confidence, :created_at, :updated_at
+        )
+        """,
+        parameters,
+    )
+    row = connection.execute(
+        "SELECT * FROM conclusions WHERE id = ?",
+        (cursor.lastrowid,),
+    ).fetchone()
+    if row is None:  # pragma: no cover - SQLite guarantees lastrowid for this insert
+        raise RuntimeError("Created Conclusion could not be loaded")
+    return dict(row)

@@ -2,7 +2,7 @@
 
 Conclusion 是一个个人决策知识库，用来保存“已经想清楚的最终结论”。当自己或 AI 再次遇到相似问题时，可以直接复用已有决定、理由、取舍和适用条件，而不是从聊天记录中重新寻找或再次分析。
 
-> 当前状态：后端骨架、健康检查和初始 SQLite schema 已建立；CRUD 和 UI 尚未实现。
+> 当前状态：后端骨架、SQLite schema 和新增 Conclusion API 已建立；列表、详情、编辑、删除、标签和 UI 尚未实现。
 
 ## Screenshots
 
@@ -53,18 +53,18 @@ Conclusion 是一个个人决策知识库，用来保存“已经想清楚的最
 
 SQLite 表结构、标签关系、搜索范围和删除语义见 [docs/data-model.md](docs/data-model.md)。
 
-## 计划 API
+## API
 
 模块内部 API 使用 `/api` 前缀；接入 FengDock 后，对外统一位于 `/conclusion/api/...`。
 
 ```text
-GET    /api/health
-GET    /api/conclusions
-POST   /api/conclusions
-GET    /api/conclusions/{id}
-PATCH  /api/conclusions/{id}
-DELETE /api/conclusions/{id}
-GET    /api/tags
+Available  GET    /api/health
+Available  POST   /api/conclusions
+Planned    GET    /api/conclusions
+Planned    GET    /api/conclusions/{id}
+Planned    PATCH  /api/conclusions/{id}
+Planned    DELETE /api/conclusions/{id}
+Planned    GET    /api/tags
 ```
 
 列表接口将支持关键词、分类、标签和结果上限参数。具体请求/响应契约在对应功能实现时用测试固定，不提前设计复杂 API。
@@ -120,6 +120,22 @@ curl -fsS http://127.0.0.1:8006/api/health
 
 ```json
 {"ok": true}
+```
+
+新增一条 Conclusion：
+
+```bash
+curl -fsS -X POST http://127.0.0.1:8006/api/conclusions \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "title": "是否现在更换书桌",
+    "question": "现有书桌还能使用，是否应该立即升级？",
+    "conclusion": "暂不更换，等现有书桌明显限制使用时再评估。",
+    "reason": "当前改善有限，不值得立即占用预算和空间。",
+    "tradeoffs": "暂时接受高度和收纳不够理想。",
+    "category": "购物",
+    "confidence": "Medium"
+  }'
 ```
 
 ## 后续 MCP
