@@ -40,14 +40,16 @@ Conclusion 是一个个人决策知识库，用来保存“已经想清楚的最
 
 ## 技术方向
 
-- Python 3.12、FastAPI、SQLAlchemy、SQLite
-- 模块独立拥有数据库和 CRUD API
-- 前端优先使用轻量静态页面，不在 MVP 引入复杂 UI 框架
-- 预留 `/conclusions` 作为 FengDock 对外路径
-- 预留 `8006` 作为 FengDock 容器内服务端口
-- 预留 `/app/data/conclusion.db` 作为部署数据库路径
+Conclusion 采用 FengDock 现有 `vendor/fire` 的 bundled-app 模式，不另起一套部署架构：
 
-这些集成值在真正接入 FengDock 时再落到父仓库配置中，避免独立开发阶段与 FengDock 强耦合。
+- 后端使用 Python 3.12、FastAPI 和标准库 `sqlite3`
+- 前端复用 Vue 3、TypeScript、Vite 和 Element Plus
+- 仓库拥有领域代码、SQLite 读写函数、CRUD API 和前端源码
+- 生产环境复用 FengDock 根虚拟环境、单个 backend 容器、进程管理和持久化卷
+- 不为 Conclusion 创建独立生产 venv、独立容器或独立部署流水线
+- FengDock 接入时使用 `/conclusion` 作为对外路径，并在构建时注入相同的前端 base/API base
+
+父子仓库的具体职责见 [docs/fengdock-integration.md](docs/fengdock-integration.md)。
 
 ## 后续 MCP
 
@@ -57,7 +59,7 @@ MCP 由 FengDock 的统一、只读 MCP 服务对外提供：
 - `search_conclusions`
 - `get_conclusion`
 
-Conclusion 模块提供稳定的只读 API；FengDock MCP 调用该 API，不直接依赖模块内部表结构。
+Conclusion 的 `app/db.py` 提供可复用的只读查询函数。FengDock MCP 像读取 `vendor/fire/app/db.py` 一样加载这些函数，并以只读方式打开 Conclusion SQLite 数据库，避免重复实现查询逻辑和内部 HTTP 客户端。
 
 ## 暂时不做
 
@@ -71,4 +73,3 @@ Conclusion 模块提供稳定的只读 API；FengDock MCP 调用该 API，不直
 ## 开发方式
 
 优先保证数据结构和基本 CRUD 可用。每次开发只完成一个可独立测试、独立提交的小功能，建议顺序见 [docs/roadmap.md](docs/roadmap.md)。
-
