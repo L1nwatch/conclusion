@@ -145,6 +145,26 @@ git diff
 
 行为变化必须有聚焦测试。UI 变化还要手动验证本次流程和至少一个相邻流程。
 
+## README 截图
+
+参考 CELPIP 的可复现截图方式，但复用 FengDock 已有的 Playwright/Chromium 栈。第一个 UI 页面完成时，应同时加入：
+
+- `scripts/seed_demo_data.py`：只生成固定的假 Conclusion 数据。
+- `scripts/capture_screenshots.py`：访问本地运行页面并写入 `screenshots/*.png`。
+- README 中对应的 Markdown 图片引用。
+- 验证截图不包含生产数据的测试或明确检查。
+
+目标截图和命名见 [screenshots/README.md](screenshots/README.md)。脚本建立后，标准调用形式应保持为：
+
+```bash
+uv run playwright install chromium
+uv run python scripts/capture_screenshots.py \
+  --base-url http://127.0.0.1:5173 \
+  --output-dir screenshots
+```
+
+截图建议固定为 `1440x900` viewport，并等待页面和 API 数据完成加载后再捕获。不要手工从生产站点截图，也不要把真实投资、健康、购物或生活决策写入 demo seed。
+
 ## 小步开发和提交
 
 每个任务使用独立分支：
