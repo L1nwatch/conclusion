@@ -159,7 +159,7 @@ git diff
 ```bash
 uv run playwright install chromium
 uv run python scripts/capture_screenshots.py \
-  --base-url http://127.0.0.1:5173 \
+  --base-url http://127.0.0.1:8006 \
   --output-dir screenshots
 ```
 

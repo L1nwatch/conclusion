@@ -6,14 +6,17 @@ Conclusion 是一个个人决策知识库，用来保存“已经想清楚的最
 
 ## Screenshots
 
-当前还没有可运行 UI，因此暂不放置设计稿或占位图冒充产品截图。列表页落地后，将使用固定的公开安全假数据生成真实截图：
+以下截图来自实际运行的 Vue 页面和固定的公开安全假数据，可通过仓库内的 Playwright 脚本重复生成。
 
-- Conclusion 列表与关键词搜索
-- 新增 Conclusion
-- Conclusion 详情
-- 编辑、标签筛选与删除确认
+### Conclusion 列表
 
-截图会存放在 [`screenshots/`](screenshots/README.md)，并通过可重复运行的 Playwright 脚本生成。任何真实投资、健康或生活决策数据都不得出现在 README 截图中。
+![Conclusion 列表](screenshots/list.png)
+
+### Conclusion 详情
+
+![Conclusion 详情](screenshots/detail.png)
+
+截图生成方式和后续页面的命名约定见 [`screenshots/`](screenshots/README.md)。任何真实投资、健康或生活决策数据都不得出现在 README 截图中。
 
 ## MVP 功能
 
