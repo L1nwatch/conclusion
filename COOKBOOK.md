@@ -191,32 +191,15 @@ git push -u origin codex/<small-feature>
 
 只有当 Conclusion 后端、前端和模块测试已经能独立运行时，才开始父仓库集成。
 
-### 1. 先解决私有仓库读取权限
+### 1. 公开代码，隔离私人数据
 
-`L1nwatch/conclusion` 当前是 private。FengDock 的默认 `GITHUB_TOKEN` 通常不能读取另一个私有仓库，VPS 也需要对应权限。
+`L1nwatch/conclusion` 是 public，和 FengDock 的其他 submodule 一样可以被 CI 与 VPS 匿名拉取，不需要额外 PAT 或 `SUBMODULE_TOKEN`。
 
-可选方案：
-
-- 保持 private：为 GitHub Actions 配置只读 fine-grained PAT/GitHub App token，并为 VPS 配置只读 Git 凭据。
-- 将代码仓库设为 public：数据库和 `.env` 已被忽略，个人 Conclusion 数据仍不会进入 Git。这是维护成本最低的方案，但必须先确认代码公开是可接受的。
-
-保持 private 时，最简单的 Actions 方案是创建仅覆盖 `L1nwatch/FengDock` 和 `L1nwatch/conclusion`、只有 Contents read 权限的 fine-grained PAT，保存为 FengDock secret `SUBMODULE_TOKEN`，并让 checkout 使用它：
-
-```yaml
-- name: Checkout
-  uses: actions/checkout@v4
-  with:
-    token: ${{ secrets.SUBMODULE_TOKEN }}
-```
-
-现有 workflow 后续执行的 `git submodule update` 会复用 checkout 持久化的 GitHub 凭据。VPS 也要给实际执行部署脚本的用户配置 Conclusion 只读凭据，并在合入前无交互验证：
+Public 仓库只包含代码、文档、公开安全截图和固定 fake seed。真实 Conclusion 数据只保存在 SQLite 和 FengDock 生产 volume 中；`.env`、`*.db`、`*.sqlite*`、备份、缓存和构建产物均由 `.gitignore` 排除。提交前可无认证验证：
 
 ```bash
-GIT_TERMINAL_PROMPT=0 git ls-remote \
-  https://github.com/L1nwatch/conclusion.git refs/heads/main
+git ls-remote https://github.com/L1nwatch/conclusion.git refs/heads/main
 ```
-
-在权限未验证前，不要把 private submodule 合入 FengDock `main`。
 
 ### 2. 添加 submodule
 
