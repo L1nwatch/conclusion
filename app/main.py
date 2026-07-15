@@ -19,8 +19,8 @@ from app.db import (
     get_conclusion,
     get_decision_model,
     init_db,
-    list_conclusions,
     list_decision_models,
+    search_conclusions,
     update_conclusion,
 )
 from app.schemas import (
@@ -116,10 +116,19 @@ def create_app(
         tags=["conclusions"],
     )
     def get_conclusions(
+        query: str | None = Query(default=None, min_length=1, max_length=200),
+        category: str | None = Query(default=None, min_length=1, max_length=100),
+        tag: str | None = Query(default=None, min_length=1, max_length=50),
         limit: int = Query(default=50, ge=1, le=200),
     ) -> dict[str, object]:
         with connect(database_path, read_only=True) as connection:
-            return list_conclusions(connection, limit=limit)
+            return search_conclusions(
+                connection,
+                query=query,
+                category=category,
+                tag=tag,
+                limit=limit,
+            )
 
     @app.get(
         "/api/conclusions/{conclusion_id}",

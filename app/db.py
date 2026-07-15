@@ -566,15 +566,57 @@ def list_conclusions(
     limit: int = 50,
 ) -> dict[str, Any]:
     """Return a bounded page of Conclusions, newest first."""
-    total = connection.execute("SELECT count(*) FROM conclusions").fetchone()[0]
+    return search_conclusions(connection, limit=limit)
+
+
+def search_conclusions(
+    connection: sqlite3.Connection,
+    *,
+    query: str | None = None,
+    category: str | None = None,
+    tag: str | None = None,
+    limit: int = 50,
+) -> dict[str, Any]:
+    """Search Conclusions by text, category, and tag, newest first."""
+    clauses: list[str] = []
+    parameters: list[Any] = []
+    if query:
+        clauses.append(
+            "(title LIKE ? OR question LIKE ? OR conclusion LIKE ? OR reason LIKE ?)"
+        )
+        pattern = f"%{query}%"
+        parameters.extend([pattern, pattern, pattern, pattern])
+    if category:
+        clauses.append("category = ? COLLATE NOCASE")
+        parameters.append(category)
+    if tag:
+        clauses.append(
+            """
+            EXISTS (
+                SELECT 1
+                FROM conclusion_tags AS search_ct
+                JOIN tags AS search_t ON search_t.id = search_ct.tag_id
+                WHERE search_ct.conclusion_id = conclusions.id
+                  AND search_t.normalized_name = ?
+            )
+            """
+        )
+        parameters.append(tag.casefold())
+
+    where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    total = connection.execute(
+        f"SELECT count(*) FROM conclusions {where_sql}",
+        parameters,
+    ).fetchone()[0]
     rows = connection.execute(
-        """
+        f"""
         SELECT *
         FROM conclusions
+        {where_sql}
         ORDER BY updated_at DESC, id DESC
         LIMIT ?
         """,
-        (limit,),
+        (*parameters, limit),
     ).fetchall()
     return {
         "count": total,

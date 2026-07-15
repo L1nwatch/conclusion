@@ -56,6 +56,42 @@ def test_list_conclusions_validates_limit(tmp_path: Path) -> None:
     assert too_large.status_code == 422
 
 
+def test_search_conclusions_combines_text_category_and_tag_filters(tmp_path: Path) -> None:
+    with TestClient(create_app(tmp_path / "conclusion.sqlite3")) as client:
+        client.post(
+            "/api/conclusions",
+            json={**payload("Keep the emergency reserve", "Finance"), "tags": ["Safety"]},
+        )
+        match = client.post(
+            "/api/conclusions",
+            json={
+                **payload("Keep emergency cash available", "Finance"),
+                "reason": "Liquidity matters more than return for this money.",
+                "tags": ["Emergency Fund", "Safety"],
+            },
+        ).json()
+        client.post(
+            "/api/conclusions",
+            json={**payload("Buy a winter coat", "Shopping"), "tags": ["Clothing"]},
+        )
+
+        response = client.get(
+            "/api/conclusions",
+            params={"query": "liquidity", "category": "finance", "tag": "emergency fund"},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {"count": 1, "returned": 1, "items": [match]}
+
+
+def test_search_conclusions_returns_all_when_filters_are_omitted(tmp_path: Path) -> None:
+    with TestClient(create_app(tmp_path / "conclusion.sqlite3")) as client:
+        created = client.post("/api/conclusions", json=payload("Keep it simple")).json()
+        response = client.get("/api/conclusions")
+
+    assert response.json() == {"count": 1, "returned": 1, "items": [created]}
+
+
 def test_get_conclusion_returns_record(tmp_path: Path) -> None:
     with TestClient(create_app(tmp_path / "conclusion.sqlite3")) as client:
         created = client.post(

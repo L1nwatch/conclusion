@@ -2,7 +2,7 @@
 
 Conclusion 是一个个人决策知识库，用来保存“已经想清楚的最终结论”。当自己或 AI 再次遇到相似问题时，可以直接复用已有决定、理由、取舍和适用条件，而不是从聊天记录中重新寻找或再次分析。
 
-> 当前状态：后端已支持新增、列表、详情和并发安全更新；Vue 界面已支持结构化决策推演、列表、详情、新增和编辑，依据区域支持 Markdown。删除、搜索和筛选尚未实现。
+> 当前状态：后端已支持新增、列表、详情、关键词/分类/标签搜索和并发安全更新；Vue 界面已支持结构化决策推演、列表、详情、新增和编辑，依据区域支持 Markdown。删除及网页搜索控件尚未实现。
 
 ## Screenshots
 
@@ -92,7 +92,7 @@ SQLite 表结构、标签关系、搜索范围和删除语义见 [docs/data-mode
 ```text
 Available  GET    /api/health
 Available  POST   /api/conclusions
-Available  GET    /api/conclusions
+Available  GET    /api/conclusions?query=&category=&tag=&limit=
 Available  GET    /api/conclusions/{id}
 Available  PATCH  /api/conclusions/{id}
 Available  POST   /api/decision-models
@@ -104,7 +104,7 @@ Planned    GET    /api/tags
 
 `PATCH` 接受部分字段，但必须同时提交客户端最后读取到的 `expectedUpdatedAt`。如果记录已被网页、MCP 或其他写入者修改，接口返回 `409 Conflict` 和最新的 `currentUpdatedAt`，避免静默覆盖。
 
-最终结论使用简短纯文本，保证在列表和详情中一眼读完。原因、取舍和适用条件保存 Markdown 原文；界面仅支持渲染 Markdown 中的公网 `https://` 图片 URL，Conclusion 不提供图片上传或本地图片托管。列表接口将支持关键词、分类、标签和结果上限参数。具体请求/响应契约在对应功能实现时用测试固定，不提前设计复杂 API。
+最终结论使用简短纯文本，保证在列表和详情中一眼读完。原因、取舍和适用条件保存 Markdown 原文；界面仅支持渲染 Markdown 中的公网 `https://` 图片 URL，Conclusion 不提供图片上传或本地图片托管。列表接口支持关键词、分类、标签和结果上限参数；关键词匹配标题、问题、结论和原因。具体请求/响应契约由测试固定。
 
 ## 架构
 
