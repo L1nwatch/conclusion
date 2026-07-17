@@ -637,6 +637,18 @@ def get_conclusion(
     return _records_with_tags(connection, [row])[0] if row is not None else None
 
 
+def delete_conclusion(
+    connection: sqlite3.Connection,
+    conclusion_id: int,
+) -> bool:
+    """Delete one Conclusion and its cascading relations."""
+    cursor = connection.execute(
+        "DELETE FROM conclusions WHERE id = ?",
+        (conclusion_id,),
+    )
+    return cursor.rowcount > 0
+
+
 def update_conclusion(
     connection: sqlite3.Connection,
     conclusion_id: int,

@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getConclusion, listDecisionModels } from '../api'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { deleteConclusion, getConclusion, listDecisionModels } from '../api'
 import DecisionAnalysisView from '../components/DecisionAnalysisView.vue'
 import MarkdownContent from '../components/MarkdownContent.vue'
 import type { ConclusionRecord, DecisionModelDefinition } from '../types'
@@ -10,6 +11,7 @@ const route = useRoute()
 const router = useRouter()
 const record = ref<ConclusionRecord | null>(null)
 const loading = ref(true)
+const deleting = ref(false)
 const error = ref('')
 const decisionDefinitions = ref<DecisionModelDefinition[]>([])
 
@@ -40,6 +42,36 @@ function formatDate(value: string) {
   }).format(new Date(value))
 }
 
+async function deleteCurrentConclusion() {
+  if (!record.value || deleting.value) return
+
+  try {
+    await ElMessageBox.confirm(
+      `删除「${record.value.title}」后无法恢复。`,
+      '确认删除这条结论？',
+      {
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
+        confirmButtonClass: 'el-button--danger',
+        type: 'warning',
+      },
+    )
+  } catch {
+    return
+  }
+
+  deleting.value = true
+  try {
+    await deleteConclusion(record.value.id)
+    ElMessage.success('结论已删除')
+    await router.push({ name: 'list' })
+  } catch (reason) {
+    ElMessage.error(reason instanceof Error ? reason.message : '删除没有成功，请稍后重试')
+  } finally {
+    deleting.value = false
+  }
+}
+
 onMounted(load)
 </script>
 
@@ -49,13 +81,23 @@ onMounted(load)
       <button class="back-link" type="button" @click="router.push({ name: 'list' })">
         ← 返回结论库
       </button>
-      <el-button
-        v-if="record"
-        plain
-        @click="router.push({ name: 'edit', params: { id: record.id } })"
-      >
-        编辑
-      </el-button>
+      <div v-if="record" class="detail-actions">
+        <el-button
+          plain
+          @click="router.push({ name: 'edit', params: { id: record.id } })"
+        >
+          编辑
+        </el-button>
+        <el-button
+          type="danger"
+          plain
+          :loading="deleting"
+          data-testid="delete-conclusion"
+          @click="deleteCurrentConclusion"
+        >
+          删除
+        </el-button>
+      </div>
     </div>
 
     <div v-if="loading" class="detail-card state-panel">

@@ -234,6 +234,12 @@ textarea {
   justify-content: space-between;
 }
 
+.detail-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .detail-card {
   padding: 46px 54px;
   background: rgba(251, 252, 250, 0.94);

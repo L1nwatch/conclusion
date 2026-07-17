@@ -18,7 +18,7 @@ export class ApiError extends Error {
   }
 }
 
-async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
+async function request(path: string, init?: RequestInit): Promise<Response> {
   const response = await fetch(`${apiBase}${path}`, init)
   if (!response.ok) {
     const body = await response.json().catch(() => null)
@@ -30,6 +30,11 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
           : '请求没有成功，请稍后重试'
     throw new ApiError(message, response.status, body)
   }
+  return response
+}
+
+async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await request(path, init)
   return response.json() as Promise<T>
 }
 
@@ -62,4 +67,8 @@ export function updateConclusion(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   })
+}
+
+export async function deleteConclusion(id: number): Promise<void> {
+  await request(`/api/conclusions/${id}`, { method: 'DELETE' })
 }

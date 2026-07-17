@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query, status
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from app.db import (
@@ -16,6 +16,7 @@ from app.db import (
     connect,
     create_conclusion,
     create_decision_model,
+    delete_conclusion,
     get_conclusion,
     get_decision_model,
     init_db,
@@ -176,6 +177,19 @@ def create_app(
         if record is None:
             raise HTTPException(status_code=404, detail="Conclusion not found")
         return record
+
+    @app.delete(
+        "/api/conclusions/{conclusion_id}",
+        status_code=status.HTTP_204_NO_CONTENT,
+        response_class=Response,
+        tags=["conclusions"],
+    )
+    def delete_conclusion_by_id(conclusion_id: int) -> Response:
+        with connect(database_path) as connection:
+            deleted = delete_conclusion(connection, conclusion_id)
+        if not deleted:
+            raise HTTPException(status_code=404, detail="Conclusion not found")
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     @app.get("/{full_path:path}", include_in_schema=False)
     def spa_fallback(full_path: str):

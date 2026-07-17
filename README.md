@@ -2,7 +2,7 @@
 
 Conclusion 是一个个人决策知识库，用来保存“已经想清楚的最终结论”。当自己或 AI 再次遇到相似问题时，可以直接复用已有决定、理由、取舍和适用条件，而不是从聊天记录中重新寻找或再次分析。
 
-> 当前状态：后端已支持新增、列表、详情、关键词/分类/标签搜索和并发安全更新；Vue 界面已支持结构化决策推演、列表、详情、新增和编辑，依据区域支持 Markdown。删除及网页搜索控件尚未实现。
+> 当前状态：后端已支持新增、列表、详情、关键词/分类/标签搜索、并发安全更新和删除；Vue 界面已支持结构化决策推演、列表、详情、新增、编辑和确认删除，依据区域支持 Markdown。网页搜索控件尚未实现。
 
 ## Screenshots
 
@@ -95,10 +95,10 @@ Available  POST   /api/conclusions
 Available  GET    /api/conclusions?query=&category=&tag=&limit=
 Available  GET    /api/conclusions/{id}
 Available  PATCH  /api/conclusions/{id}
+Available  DELETE /api/conclusions/{id}
 Available  POST   /api/decision-models
 Available  GET    /api/decision-models
 Available  GET    /api/decision-models/{id}
-Planned    DELETE /api/conclusions/{id}
 Planned    GET    /api/tags
 ```
 
