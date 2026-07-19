@@ -1,20 +1,10 @@
 export type Confidence = 'High' | 'Medium' | 'Low'
 
-export interface DecisionPrompt {
-  key: string
-  label: string
-  placeholder: string
-}
-
 export interface DecisionModelDefinition {
   id: string
   version: number
   name: string
-  shortName: string
-  description: string
-  prompts: DecisionPrompt[]
-  sourceName: string
-  sourceUrl: string
+  explanation: string
   isBuiltin: boolean
   createdAt: string
   updatedAt: string

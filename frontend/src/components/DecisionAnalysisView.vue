@@ -24,13 +24,12 @@ const visibleModels = computed(() =>
 )
 
 function visibleAnswers(run: DecisionModelRun) {
-  const definition = props.definitions.find(
-    (item) => item.id === run.modelId && item.version === run.modelVersion,
-  )
-  const answers = run.answers
-  return (definition?.prompts ?? [])
-    .map((prompt) => ({ ...prompt, answer: answers[prompt.key] ?? '' }))
-    .filter((item) => item.answer.trim())
+  const current = run.answers.analysis?.trim()
+  if (current) return current
+
+  // Legacy records stored several prompt answers. Keep them readable after
+  // simplifying each model to one short analysis.
+  return Object.values(run.answers).filter((answer) => answer.trim()).join('\n\n')
 }
 </script>
 
@@ -43,15 +42,13 @@ function visibleAnswers(run: DecisionModelRun) {
 
     <article v-for="item in visibleModels" :key="item.run.modelId" class="analysis-model">
       <div class="analysis-model-heading">
-        <span>{{ item.definition?.shortName }}</span>
+        <span>思考模型</span>
         <h3>{{ item.definition?.name }}</h3>
       </div>
-      <dl>
-        <template v-for="answer in visibleAnswers(item.run)" :key="answer.key">
-          <dt>{{ answer.label }}</dt>
-          <dd>{{ answer.answer }}</dd>
-        </template>
-      </dl>
+      <div class="analysis-model-body">
+        <p class="analysis-explanation">{{ item.definition?.explanation }}</p>
+        <p class="analysis-answer">{{ visibleAnswers(item.run) }}</p>
+      </div>
     </article>
   </section>
 </template>

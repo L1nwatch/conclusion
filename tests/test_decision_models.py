@@ -7,28 +7,14 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from app.db import connect
 from app.main import create_app
 
 
 CUSTOM_MODEL = {
     "id": "constraint-check",
     "name": "约束检查",
-    "shortName": "CONSTRAINTS",
-    "description": "找出决定必须满足的硬约束。",
-    "prompts": [
-        {
-            "key": "hardConstraints",
-            "label": "硬约束",
-            "placeholder": "哪些条件绝对不能违反？",
-        },
-        {
-            "key": "bottleneck",
-            "label": "瓶颈",
-            "placeholder": "哪个约束最先限制结果？",
-        },
-    ],
-    "sourceName": "",
-    "sourceUrl": "",
+    "explanation": "找出决定必须满足的硬约束，以及最先限制结果的瓶颈。",
 }
 
 
@@ -62,25 +48,15 @@ def test_list_and_get_builtin_decision_models(tmp_path: Path) -> None:
         "reversibility",
     ]
     assert all(item["version"] == 1 and item["isBuiltin"] for item in body["items"])
+    assert all(
+        set(item) == {
+            "id", "version", "name", "explanation", "isBuiltin", "createdAt", "updatedAt"
+        }
+        for item in body["items"]
+    )
     assert fetched.status_code == 200
-    assert [prompt["key"] for prompt in fetched.json()["prompts"]] == [
-        "tenHours",
-        "tenDays",
-        "tenMonths",
-        "tenYears",
-    ]
-    assert [prompt["key"] for prompt in munger.json()["prompts"]] == [
-        "risk",
-        "independence",
-        "preparation",
-        "humility",
-        "rigor",
-        "allocation",
-        "patience",
-        "decisiveness",
-        "change",
-        "focus",
-    ]
+    assert "10 小时、10 天、10 个月和 10 年" in fetched.json()["explanation"]
+    assert "能力圈、激励、风险、机会成本" in munger.json()["explanation"]
 
 
 def test_create_custom_model_and_use_it_in_conclusion(tmp_path: Path) -> None:
@@ -94,10 +70,7 @@ def test_create_custom_model_and_use_it_in_conclusion(tmp_path: Path) -> None:
                     {
                         "modelId": "constraint-check",
                         "modelVersion": 1,
-                        "answers": {
-                            "hardConstraints": "Stay within the weekly time budget.",
-                            "bottleneck": "Available focus time.",
-                        },
+                        "answers": {"analysis": "Stay within the weekly time budget."},
                     }
                 ],
             },
@@ -131,13 +104,8 @@ def test_create_decision_model_rejects_duplicate_id(tmp_path: Path) -> None:
     "change",
     [
         {"id": "Bad ID"},
-        {"sourceUrl": "http://example.com"},
-        {
-            "prompts": [
-                {"key": "same", "label": "First", "placeholder": ""},
-                {"key": "same", "label": "Second", "placeholder": ""},
-            ]
-        },
+        {"name": " "},
+        {"explanation": " "},
     ],
 )
 def test_create_decision_model_validates_definition(
@@ -162,7 +130,7 @@ def test_create_decision_model_validates_definition(
         {
             "modelId": "time-horizons",
             "modelVersion": 2,
-            "answers": {"tenHours": "Answer"},
+            "answers": {"analysis": "Answer"},
         },
         {
             "modelId": "time-horizons",
@@ -192,3 +160,49 @@ def test_get_missing_decision_model_returns_404(tmp_path: Path) -> None:
         response = client.get("/api/decision-models/missing-model")
 
     assert response.status_code == 404
+
+
+def test_builtin_refresh_keeps_legacy_prompt_keys_readable(tmp_path: Path) -> None:
+    database_path = tmp_path / "conclusion.sqlite3"
+    with TestClient(create_app(database_path)):
+        pass
+
+    legacy_prompts = (
+        '[{"key":"tenHours","label":"10 小时后","placeholder":""}]'
+    )
+    with connect(database_path) as connection:
+        connection.execute(
+            """
+            UPDATE decision_models
+            SET description = ?, prompts_json = ?
+            WHERE id = 'time-horizons'
+            """,
+            ("旧版多问题说明", legacy_prompts),
+        )
+
+    payload = {
+        **CONCLUSION_PAYLOAD,
+        "decisionAnalysis": {
+            "version": 1,
+            "models": [
+                {
+                    "modelId": "time-horizons",
+                    "modelVersion": 1,
+                    "answers": {"tenHours": "Legacy answer remains valid."},
+                }
+            ],
+        },
+    }
+    with TestClient(create_app(database_path)) as client:
+        refreshed = client.get("/api/decision-models/time-horizons")
+        conclusion = client.post("/api/conclusions", json=payload)
+
+    assert refreshed.status_code == 200
+    assert refreshed.json()["explanation"] != "旧版多问题说明"
+    assert conclusion.status_code == 201
+
+    with connect(database_path, read_only=True) as connection:
+        stored = connection.execute(
+            "SELECT prompts_json FROM decision_models WHERE id = 'time-horizons'"
+        ).fetchone()
+    assert stored["prompts_json"] == legacy_prompts

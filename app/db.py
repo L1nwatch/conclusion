@@ -19,106 +19,37 @@ BUILTIN_DECISION_MODELS = (
     {
         "id": "precedent-review",
         "name": "经验之谈",
-        "short_name": "PAST DECISIONS",
-        "description": "先查已有 Conclusion，分清可复用的经验和这次问题的关键差异。",
-        "prompts": [
-            {"key": "relatedConclusions", "label": "相关结论", "placeholder": "有哪些相似 Conclusion？写下 ID、标题或链接。"},
-            {"key": "sharedPattern", "label": "共同规律", "placeholder": "过去反复出现了什么模式或经验？"},
-            {"key": "keyDifferences", "label": "关键差异", "placeholder": "这一次有什么不同，不能直接照搬？"},
-            {"key": "transferableLesson", "label": "可复用原则", "placeholder": "最终可以迁移到这次决定的原则是什么？"},
-        ],
-        "source_name": "",
-        "source_url": "",
+        "explanation": "先查找相似的既有 Conclusion，复用已经验证过的经验，同时指出这次有什么关键差异。没有先例时直接说明，不要编造。",
     },
     {
         "id": "munger-checklist",
         "name": "穷查理原则检查",
-        "short_name": "POOR CHARLIE CHECK",
-        "description": "按风险、独立判断、准备、谦逊、耐心等主题，检查决定中的明显遗漏。",
-        "prompts": [
-            {"key": "risk", "label": "风险", "placeholder": "永久损失、声誉损害或无法承受的结果是什么？"},
-            {"key": "independence", "label": "独立判断", "placeholder": "判断来自事实，还是共识、权威或情绪？"},
-            {"key": "preparation", "label": "准备", "placeholder": "关键事实是否准备充分？还缺什么信息？"},
-            {"key": "humility", "label": "谦逊", "placeholder": "哪些超出能力圈？自己最可能错在哪里？"},
-            {"key": "rigor", "label": "严格分析", "placeholder": "是否混淆了价格与价值、忙碌与进展？"},
-            {"key": "allocation", "label": "资源配置", "placeholder": "相对其他选择，这是时间和资金的最佳用途吗？"},
-            {"key": "patience", "label": "耐心", "placeholder": "真的需要现在行动吗？等待能换来什么？"},
-            {"key": "decisiveness", "label": "果断", "placeholder": "如果条件已经满足，还在因为什么拖延？"},
-            {"key": "change", "label": "适应变化", "placeholder": "哪些关键事实已经变化，或可能让结论失效？"},
-            {"key": "focus", "label": "专注", "placeholder": "真正决定结果的一两个变量是什么？"},
-        ],
-        "source_name": "Poor Charlie's Almanack — Investment Principles Checklist (adapted)",
-        "source_url": "https://www.poorcharliesalmanack.com/",
+        "explanation": "用芒格式检查表快速扫一遍能力圈、激励、风险、机会成本、事实依据和心理偏差，找出最容易忽略的一项。例如促销带来的紧迫感，可能不是购买理由。",
     },
     {
         "id": "scenario-range",
         "name": "极端思考",
-        "short_name": "BEST · BASE · WORST",
-        "description": "同时看到最好、最可能和最坏结果，以及可以保留的退路。",
-        "prompts": [
-            {"key": "bestCase", "label": "最好情况", "placeholder": "合理范围内，最好会发生什么？"},
-            {"key": "likelyCase", "label": "最可能情况", "placeholder": "不乐观也不悲观，最可能怎样？"},
-            {"key": "worstCase", "label": "最坏情况", "placeholder": "合理的最坏结果是什么？"},
-            {"key": "safeguards", "label": "保护措施", "placeholder": "如何降低损失，或者保留退路？"},
-        ],
-        "source_name": "",
-        "source_url": "",
+        "explanation": "分别看合理的最好、最可能和最坏结果，重点确认最坏结果能否承受，以及能否预留退路。不要把极小概率的幻想当成主要情景。",
     },
     {
         "id": "time-horizons",
         "name": "时间尺度",
-        "short_name": "10H → 10Y",
-        "description": "把眼前情绪拉远，观察这个决定在不同时间尺度上的影响。",
-        "prompts": [
-            {"key": "tenHours", "label": "10 小时后", "placeholder": "今天晚些时候，我会怎么看？"},
-            {"key": "tenDays", "label": "10 天后", "placeholder": "短期影响会是什么？"},
-            {"key": "tenMonths", "label": "10 个月后", "placeholder": "它会带来什么持续变化？"},
-            {"key": "tenYears", "label": "10 年后", "placeholder": "长期回看，什么真正重要？"},
-        ],
-        "source_name": "Suzy Welch 10-10-10",
-        "source_url": "https://suzywelch.com/books/",
+        "explanation": "分别从 10 小时、10 天、10 个月和 10 年后回看这个决定，区分短期情绪与长期影响。例如今天的不舍，十个月后可能已经无关紧要。",
     },
     {
         "id": "inversion",
         "name": "逆向思考",
-        "short_name": "HOW TO FAIL",
-        "description": "从“怎样一定搞砸”倒推失败路径，再提前切断关键原因。",
-        "prompts": [
-            {"key": "failureGoal", "label": "确保失败", "placeholder": "如果目标是把它搞砸，我会怎么做？"},
-            {"key": "failureCauses", "label": "失败路径", "placeholder": "哪些行为或条件会一步步导致失败？"},
-            {"key": "currentExposure", "label": "当前暴露", "placeholder": "现在已经踩中了哪些失败条件？"},
-            {"key": "prevention", "label": "提前切断", "placeholder": "最先应该消除哪个原因？"},
-        ],
-        "source_name": "",
-        "source_url": "",
+        "explanation": "先问怎样做一定会把事情搞砸，再检查当前方案是否已经踩中这些失败条件。优先切断最可能、代价最大的失败路径。",
     },
     {
         "id": "inaction-value",
         "name": "不行动分析",
-        "short_name": "WHAT IF NOT",
-        "description": "把“不做”也当作一个选项，比较避免的成本和错失的价值。",
-        "prompts": [
-            {"key": "statusQuo", "label": "保持现状", "placeholder": "如果什么都不做，接下来会怎样？"},
-            {"key": "avoidedCost", "label": "避免的成本", "placeholder": "不行动可以避免哪些时间、金钱或风险？"},
-            {"key": "missedValue", "label": "错失的价值", "placeholder": "不行动会失去什么机会或长期价值？"},
-            {"key": "actionTrigger", "label": "行动触发点", "placeholder": "出现什么条件时，就不应继续等待？"},
-        ],
-        "source_name": "",
-        "source_url": "",
+        "explanation": "把“不做”也当作一个真实选项，比较它能避免的成本、会错失的价值，以及继续等待的代价。必要时给出明确的行动触发条件。",
     },
     {
         "id": "reversibility",
         "name": "可逆性判断",
-        "short_name": "ONE-WAY · TWO-WAY",
-        "description": "判断决定能否低成本撤回，并优先设计最小可逆试验。",
-        "prompts": [
-            {"key": "doorType", "label": "单向还是双向", "placeholder": "做错后能否轻易返回？为什么？"},
-            {"key": "exitCost", "label": "退出成本", "placeholder": "撤销决定需要付出什么时间、金钱或信誉？"},
-            {"key": "smallExperiment", "label": "最小试验", "placeholder": "能否先做一个更小、更便宜、可撤回的版本？"},
-            {"key": "decisionSpeed", "label": "投入程度", "placeholder": "它值得深思，还是应该快速试验？"},
-        ],
-        "source_name": "",
-        "source_url": "",
+        "explanation": "判断这是难以撤回的单向门，还是可以低成本试错的双向门。可逆决定优先做小实验，不可逆决定才投入更多调查和审慎。",
     },
 )
 UPDATE_FIELDS = (
@@ -285,7 +216,7 @@ def init_db(connection: sqlite3.Connection) -> None:
 
 
 def _seed_builtin_decision_models(connection: sqlite3.Connection) -> None:
-    """Register built-in models once without overwriting future stored records."""
+    """Register built-ins and refresh their two maintained business fields."""
     timestamp = utc_timestamp()
     for model in BUILTIN_DECISION_MODELS:
         connection.execute(
@@ -294,16 +225,24 @@ def _seed_builtin_decision_models(connection: sqlite3.Connection) -> None:
                 id, version, name, short_name, description, prompts_json,
                 source_name, source_url, is_builtin, created_at, updated_at
             ) VALUES (?, 1, ?, ?, ?, ?, ?, ?, 1, ?, ?)
-            ON CONFLICT(id) DO NOTHING
+            ON CONFLICT(id) DO UPDATE SET
+                name = excluded.name,
+                short_name = excluded.short_name,
+                description = excluded.description,
+                source_name = '',
+                source_url = '',
+                updated_at = excluded.updated_at
+            WHERE decision_models.name != excluded.name
+               OR decision_models.description != excluded.description
             """,
             (
                 model["id"],
                 model["name"],
-                model["short_name"],
-                model["description"],
-                json.dumps(model["prompts"], ensure_ascii=False, separators=(",", ":")),
-                model["source_name"],
-                model["source_url"],
+                model["name"],
+                model["explanation"],
+                "[]",
+                "",
+                "",
                 timestamp,
                 timestamp,
             ),
@@ -431,7 +370,11 @@ def _validate_decision_analysis(
             raise UnknownDecisionModelError(
                 f"Unknown decision model version: {model_id}@{model_version}"
             )
-        prompt_keys = {prompt["key"] for prompt in json.loads(row["prompts_json"])}
+        # ``analysis`` is the single current answer field. Stored prompt keys
+        # remain accepted so old Conclusions can still be edited and saved.
+        prompt_keys = {"analysis"} | {
+            prompt["key"] for prompt in json.loads(row["prompts_json"])
+        }
         unknown_keys = set(run["answers"]) - prompt_keys
         if unknown_keys:
             raise UnknownDecisionModelError(
@@ -441,7 +384,11 @@ def _validate_decision_analysis(
 
 def _serialize_decision_model(row: sqlite3.Row) -> dict[str, Any]:
     record = dict(row)
-    record["prompts"] = json.loads(record.pop("prompts_json"))
+    record["explanation"] = record.pop("description")
+    record.pop("short_name")
+    record.pop("prompts_json")
+    record.pop("source_name")
+    record.pop("source_url")
     record["is_builtin"] = bool(record["is_builtin"])
     return record
 
@@ -496,11 +443,11 @@ def create_decision_model(
             (
                 values["id"],
                 values["name"],
-                values["short_name"],
-                values["description"],
-                json.dumps(values["prompts"], ensure_ascii=False, separators=(",", ":")),
-                values.get("source_name", ""),
-                values.get("source_url", ""),
+                values["name"],
+                values["explanation"],
+                "[]",
+                "",
+                "",
                 timestamp,
                 timestamp,
             ),

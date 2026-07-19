@@ -47,62 +47,21 @@ def _validate_and_deduplicate_tags(tags: list[str]) -> list[str]:
 
 
 MODEL_ID_PATTERN = r"^[a-z0-9][a-z0-9-]{1,63}$"
-PROMPT_KEY_PATTERN = r"^[a-z][a-zA-Z0-9]{0,63}$"
-
-
-class DecisionPrompt(BaseModel):
-    """One stable prompt in a reusable decision model."""
-
-    key: str = Field(min_length=1, max_length=64, pattern=PROMPT_KEY_PATTERN)
-    label: str = Field(min_length=1, max_length=120)
-    placeholder: str = Field(default="", max_length=280)
-
-    @field_validator("key", "label", "placeholder", mode="before")
-    @classmethod
-    def strip_text(cls, value: object) -> object:
-        return _strip_outer_whitespace(value)
 
 
 class DecisionModelCreate(BaseModel):
-    """Immutable version-one definition accepted for a new decision model."""
+    """The two business fields in a reusable decision model plus its technical ID."""
 
     model_config = ConfigDict(populate_by_name=True)
 
     id: str = Field(min_length=2, max_length=64, pattern=MODEL_ID_PATTERN)
     name: str = Field(min_length=1, max_length=120)
-    short_name: str = Field(alias="shortName", min_length=1, max_length=80)
-    description: str = Field(min_length=1, max_length=500)
-    prompts: list[DecisionPrompt] = Field(min_length=1, max_length=20)
-    source_name: str = Field(default="", alias="sourceName", max_length=160)
-    source_url: str = Field(default="", alias="sourceUrl", max_length=2_000)
+    explanation: str = Field(min_length=1, max_length=800)
 
-    @field_validator(
-        "id",
-        "name",
-        "short_name",
-        "description",
-        "source_name",
-        "source_url",
-        mode="before",
-    )
+    @field_validator("id", "name", "explanation", mode="before")
     @classmethod
     def strip_text(cls, value: object) -> object:
         return _strip_outer_whitespace(value)
-
-    @field_validator("prompts")
-    @classmethod
-    def require_unique_prompt_keys(cls, prompts: list[DecisionPrompt]) -> list[DecisionPrompt]:
-        keys = [prompt.key for prompt in prompts]
-        if len(keys) != len(set(keys)):
-            raise ValueError("decision model prompt keys must be unique")
-        return prompts
-
-    @field_validator("source_url")
-    @classmethod
-    def require_https_source(cls, value: str) -> str:
-        if value and not value.startswith("https://"):
-            raise ValueError("sourceUrl must use https")
-        return value
 
 
 class DecisionModelRecord(DecisionModelCreate):

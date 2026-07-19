@@ -26,9 +26,7 @@ CREATE_PAYLOAD = {
             {
                 "modelId": "inversion",
                 "modelVersion": 1,
-                "answers": {
-                    "failureGoal": "Keep buying fabrics that already failed.",
-                },
+                "answers": {"analysis": "Keep buying fabrics that already failed."},
             }
         ],
     },

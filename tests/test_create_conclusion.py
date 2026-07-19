@@ -28,26 +28,12 @@ VALID_PAYLOAD = {
             {
                 "modelId": "time-horizons",
                 "modelVersion": 1,
-                "answers": {
-                    "tenHours": "No meaningful difference.",
-                    "tenDays": "The urge will probably fade.",
-                    "tenMonths": "The current desk may still be adequate.",
-                    "tenYears": "The purchase timing will not matter.",
-                },
+                "answers": {"analysis": "The urge will fade and the timing will not matter."},
             },
             {
                 "modelId": "munger-checklist",
                 "modelVersion": 1,
-                "answers": {
-                    "risk": "Avoid permanent injury and an irreversible purchase.",
-                    "independence": "The sale creates artificial urgency.",
-                    "preparation": "Measure the current desk before comparing options.",
-                    "humility": "I cannot infer ergonomic benefit from marketing alone.",
-                    "allocation": "Keep the budget for a higher-impact upgrade.",
-                    "patience": "There is no need to act before the current desk limits work.",
-                    "change": "Persistent pain would change the decision.",
-                    "focus": "Comfort and usable space matter more than extra features.",
-                },
+                "answers": {"analysis": "The sale creates urgency but not enough value."},
             },
         ],
     },
@@ -175,32 +161,17 @@ def test_create_conclusion_rejects_long_core_decision(tmp_path: Path) -> None:
         [
             {
                 "modelId": "time-horizons",
-                "answers": {
-                    "tenHours": "",
-                    "tenDays": "",
-                    "tenMonths": "",
-                    "tenYears": "",
-                },
+                "answers": {"analysis": ""},
             }
         ],
         [
             {
                 "modelId": "scenario-range",
-                "answers": {
-                    "bestCase": "Good",
-                    "likelyCase": "",
-                    "worstCase": "",
-                    "safeguards": "",
-                },
+                "answers": {"analysis": "Good"},
             },
             {
                 "modelId": "scenario-range",
-                "answers": {
-                    "bestCase": "Better",
-                    "likelyCase": "",
-                    "worstCase": "",
-                    "safeguards": "",
-                },
+                "answers": {"analysis": "Better"},
             },
         ],
     ],

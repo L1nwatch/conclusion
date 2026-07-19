@@ -8,7 +8,7 @@ export function emptyDecisionAnalysis(
     models: definitions.map((definition) => ({
       modelId: definition.id,
       modelVersion: definition.version,
-      answers: Object.fromEntries(definition.prompts.map((prompt) => [prompt.key, ''])),
+      answers: { analysis: '' },
     })),
   }
 }

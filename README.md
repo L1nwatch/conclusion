@@ -65,7 +65,7 @@ Conclusion 是一个个人决策知识库，用来保存“已经想清楚的最
 | `category` | 分类，如投资、健康、生活、学习 |
 | `tags` | 标签集合 |
 | `confidence` | `High`、`Medium` 或 `Low` |
-| `decisionAnalysis` | 可选的结构化决策推演，包含模型 ID、版本和各项回答 |
+| `decisionAnalysis` | 可选的结构化决策推演；每个模型保存一段简析 |
 | `createdAt` | 创建时间 |
 | `updatedAt` | 最后更新时间 |
 
@@ -73,7 +73,7 @@ SQLite 表结构、标签关系、搜索范围和删除语义见 [docs/data-mode
 
 ## 决策工作台
 
-新增或编辑 Conclusion 时，可以按需使用七个模型，再写最终结论：
+新增或编辑 Conclusion 时，依次使用七个模型，再写最终结论：
 
 - 经验之谈：先找相似 Conclusion，再区分共同规律和本次差异
 - 穷查理原则检查：从风险、独立判断、准备、谦逊、耐心等主题排查遗漏
@@ -83,7 +83,7 @@ SQLite 表结构、标签关系、搜索范围和删除语义见 [docs/data-mode
 - 不行动分析：比较保持现状避免的成本和错失的价值
 - 可逆性判断：区分单向门与双向门，优先设计最小可逆试验
 
-它不是必须全部填写的长问卷。简单决定可以跳过，复杂决定只填写真正有帮助的模型。“经验之谈”当前可填写相关 Conclusion 的 ID、标题或链接；关键词搜索完成后，网页和 MCP 会先检索现有记录再填写该模型。模型定义保存在后端注册表，网页与未来 MCP 读取同一份数据；通过 API/MCP 新增自定义模型后，无需修改前端即可出现。模型回答以 `modelId + modelVersion + answers` 保存，而不是合并成 Markdown。模型来源、命名边界和扩展原则见 [docs/decision-models.md](docs/decision-models.md)。
+每个模型只有名称和几句话的解释，不再拆成多问题问卷；应用模型后只记录一段简析。用户让 AI “使用思考模型”时，MCP 会返回完整清单，AI 按顺序把全部模型各过一遍，再汇总最终结论。“经验之谈”会先检索已有 Conclusion；没有先例时明确说明，不编造经验。模型定义保存在后端注册表，网页与 MCP 读取同一份数据；通过 API/MCP 新增自定义模型后，无需修改前端即可出现。简析以 `modelId + modelVersion + answers.analysis` 保存。模型边界和扩展原则见 [docs/decision-models.md](docs/decision-models.md)。
 
 ## API
 
@@ -195,6 +195,8 @@ MCP 由 FengDock 的统一 OAuth 服务对外提供。读取工具：
 
 - `list_decision_models`
 - `get_decision_model`
+
+每个思考模型只定义 `name` 和简短的 `explanation` 两个业务字段。用户要求使用思考模型时，AI 应按 `list_decision_models` 的固定顺序把全部模型各过一遍，每个模型只做几句话的具体分析，再汇总为最终结论。
 
 Conclusion 的 `app/db.py` 提供可复用读写函数，FengDock 像加载 `vendor/fire/app/db.py` 一样加载它们。读取工具使用只读连接；写入工具使用普通事务连接，并通过 MCP annotations 明确标记副作用。MVP 暂不开放 `delete_conclusion`，删除仍在 UI 中由用户确认。
 
