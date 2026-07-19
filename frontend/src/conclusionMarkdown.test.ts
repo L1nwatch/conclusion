@@ -52,7 +52,7 @@ describe('conclusion Markdown detail', () => {
       conclusionMarkdown(
         {
           ...record,
-          question: record.title,
+          question: record.conclusion,
           tradeoffs: '',
           conditions: '',
           decisionAnalysis: { version: 1, models: [] },

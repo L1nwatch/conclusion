@@ -88,11 +88,8 @@ onMounted(load)
         >
           <span class="decision-index">{{ String(index + 1).padStart(2, '0') }}</span>
           <div class="decision-body">
-            <div class="card-meta">
-              <span>{{ item.title }}</span>
-              <span class="updated-at">{{ formatDate(item.updatedAt) }}</span>
-            </div>
             <p class="decision-statement">{{ item.conclusion }}</p>
+            <span class="updated-at">{{ formatDate(item.updatedAt) }}</span>
           </div>
           <span class="row-arrow" aria-hidden="true">↗</span>
         </article>

@@ -30,7 +30,7 @@ const form = reactive<ConclusionInput>({
 })
 
 function applyRecord(record: ConclusionInput & { updatedAt: string }) {
-  form.title = record.title
+  form.title = record.conclusion
   form.question = record.question
   form.conclusion = record.conclusion
   form.reason = record.reason
@@ -59,8 +59,7 @@ async function load() {
 
 function validate(): boolean {
   const required: Array<[string, string]> = [
-    [form.title, '请填写标题'],
-    [form.conclusion, '请填写最终结论'],
+    [form.conclusion, '请填写结论'],
     [form.reason, '请填写详细说明'],
   ]
   const missing = required.find(([value]) => !value.trim())
@@ -78,7 +77,9 @@ async function save() {
   try {
     const payload = {
       ...form,
-      question: form.question.trim() || form.title.trim(),
+      title: form.conclusion.trim(),
+      conclusion: form.conclusion.trim(),
+      question: form.question.trim() || form.conclusion.trim(),
       category: form.category.trim() || '其他',
       tags: [...form.tags],
     }
@@ -120,7 +121,7 @@ onMounted(load)
         <div>
           <p class="section-kicker">{{ isEdit ? 'EDIT CONCLUSION' : 'NEW CONCLUSION' }}</p>
           <h1>{{ isEdit ? '编辑结论' : '记下一个答案' }}</h1>
-          <p>一句话说清答案，需要时再补充 Markdown 说明。</p>
+          <p>先写下已经拍板的答案，需要时再补充 Markdown 说明。</p>
         </div>
         <el-button type="primary" size="large" :loading="saving" @click="save">
           {{ isEdit ? '保存修改' : '保存结论' }}
@@ -153,12 +154,7 @@ onMounted(load)
 
         <section class="simple-fields">
           <label>
-            <span>标题</span>
-            <el-input v-model="form.title" maxlength="160" placeholder="例如：衣服材质购买原则" />
-          </label>
-
-          <label>
-            <span>一句话结论</span>
+            <span>结论</span>
             <el-input
               v-model="form.conclusion"
               maxlength="280"

@@ -50,7 +50,7 @@ async function deleteCurrentConclusion() {
 
   try {
     await ElMessageBox.confirm(
-      `删除「${record.value.title}」后无法恢复。`,
+      `删除「${record.value.conclusion}」后无法恢复。`,
       '确认删除这条结论？',
       {
         confirmButtonText: '删除',
@@ -116,11 +116,7 @@ onMounted(load)
     />
 
     <article v-else-if="record" class="detail-card" data-testid="conclusion-detail">
-      <h1>{{ record.title }}</h1>
-
-      <section class="decision-hero">
-        <p class="detail-decision">{{ record.conclusion }}</p>
-      </section>
+      <h1>{{ record.conclusion }}</h1>
 
       <section class="markdown-detail">
         <MarkdownContent :content="details" preview-id="conclusion-detail-markdown" />

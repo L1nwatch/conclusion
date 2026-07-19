@@ -6,7 +6,7 @@ export function conclusionMarkdown(
 ): string {
   const sections = [record.reason.trim()]
 
-  if (record.question.trim() && record.question.trim() !== record.title.trim()) {
+  if (record.question.trim() && record.question.trim() !== record.conclusion.trim()) {
     sections.push(`## 原始问题\n\n${record.question.trim()}`)
   }
   if (record.tradeoffs.trim()) {

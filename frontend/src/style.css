@@ -175,7 +175,7 @@ textarea {
 }
 
 .decision-statement {
-  margin: 10px 0 0;
+  margin: 0 0 9px;
   color: #183228;
   font-family: Georgia, "Songti SC", serif;
   font-size: clamp(1.22rem, 2.7vw, 1.65rem);
@@ -279,22 +279,9 @@ textarea {
   letter-spacing: -0.035em;
 }
 
-.decision-hero {
-  padding: 22px 0 30px;
-  border-bottom: 1px solid var(--line);
-}
-
-.detail-decision {
-  margin: 0;
-  color: #496158;
-  font-size: clamp(1.1rem, 2.4vw, 1.35rem);
-  font-weight: 550;
-  line-height: 1.65;
-  white-space: pre-wrap;
-}
-
 .markdown-detail {
-  padding: 38px 0 44px;
+  padding: 24px 0 44px;
+  border-top: 1px solid var(--line);
 }
 
 .markdown-detail .md-editor-preview-wrapper {
@@ -820,10 +807,6 @@ textarea {
   .detail-card,
   .form-card {
     padding: 30px 22px;
-  }
-
-  .detail-decision {
-    font-size: 1.05rem;
   }
 
   .question-section,
