@@ -8,9 +8,7 @@
 list.png
 detail.png
 create.png
-decision-workbench.png
-decision-path.png
-search-and-tags.png        # 搜索和标签筛选实现后加入
+search.png                 # 网页关键词搜索实现后加入
 ```
 
 ## 规则

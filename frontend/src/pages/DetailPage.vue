@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { deleteConclusion, getConclusion, listDecisionModels } from '../api'
-import DecisionAnalysisView from '../components/DecisionAnalysisView.vue'
 import MarkdownContent from '../components/MarkdownContent.vue'
+import { conclusionMarkdown } from '../conclusionMarkdown'
 import type { ConclusionRecord, DecisionModelDefinition } from '../types'
 
 const route = useRoute()
@@ -14,6 +14,9 @@ const loading = ref(true)
 const deleting = ref(false)
 const error = ref('')
 const decisionDefinitions = ref<DecisionModelDefinition[]>([])
+const details = computed(() =>
+  record.value ? conclusionMarkdown(record.value, decisionDefinitions.value) : '',
+)
 
 async function load() {
   loading.value = true
@@ -113,57 +116,18 @@ onMounted(load)
     />
 
     <article v-else-if="record" class="detail-card" data-testid="conclusion-detail">
-      <div class="detail-meta">
-        <span>{{ record.category }}</span>
-        <span>·</span>
-        <span class="confidence-label" :data-confidence="record.confidence">
-          {{ record.confidence }} confidence
-        </span>
-      </div>
-
-      <div v-if="record.tags.length" class="detail-tags" aria-label="标签">
-        <span v-for="tag in record.tags" :key="tag">#{{ tag }}</span>
-      </div>
-
       <h1>{{ record.title }}</h1>
 
       <section class="decision-hero">
-        <p class="section-kicker">结论</p>
         <p class="detail-decision">{{ record.conclusion }}</p>
       </section>
 
-      <section class="detail-section question-section">
-        <p class="section-kicker">原始问题</p>
-        <p>{{ record.question }}</p>
+      <section class="markdown-detail">
+        <MarkdownContent :content="details" preview-id="conclusion-detail-markdown" />
       </section>
-
-      <DecisionAnalysisView
-        :analysis="record.decisionAnalysis"
-        :definitions="decisionDefinitions"
-      />
-
-      <section class="detail-section reason-section">
-        <p class="section-kicker">为什么</p>
-        <MarkdownContent :content="record.reason" preview-id="reason-preview" />
-      </section>
-
-      <div v-if="record.tradeoffs || record.conditions" class="detail-columns">
-        <section v-if="record.tradeoffs" class="detail-section context-section">
-          <p class="section-kicker">接受的取舍</p>
-          <MarkdownContent
-            :content="record.tradeoffs"
-            preview-id="tradeoffs-preview"
-          />
-        </section>
-        <section v-if="record.conditions" class="detail-section context-section">
-          <p class="section-kicker">重新评估条件</p>
-          <MarkdownContent :content="record.conditions" preview-id="conditions-preview" />
-        </section>
-      </div>
 
       <footer class="detail-footer">
-        <span>创建于 {{ formatDate(record.createdAt) }}</span>
-        <span>更新于 {{ formatDate(record.updatedAt) }}</span>
+        <span>最后更新于 {{ formatDate(record.updatedAt) }}</span>
       </footer>
     </article>
   </main>

@@ -1,22 +1,14 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { listConclusions } from '../api'
-import type { ConclusionRecord, Confidence } from '../types'
+import type { ConclusionRecord } from '../types'
 
 const router = useRouter()
 const items = ref<ConclusionRecord[]>([])
 const total = ref(0)
 const loading = ref(true)
 const error = ref('')
-
-const categories = computed(() => new Set(items.value.map((item) => item.category)).size)
-
-const confidenceLabel: Record<Confidence, string> = {
-  High: '高置信度',
-  Medium: '中置信度',
-  Low: '低置信度',
-}
 
 async function load() {
   loading.value = true
@@ -47,7 +39,7 @@ onMounted(load)
   <main class="page-shell">
     <header class="library-header">
       <div>
-        <p class="eyebrow">CONCLUSION · {{ total }} DECISIONS</p>
+        <p class="eyebrow">CONCLUSION · {{ total }}</p>
         <h1>不再重复思考。</h1>
         <p>只保存已经拍板的答案。</p>
       </div>
@@ -60,7 +52,7 @@ onMounted(load)
       <div class="section-heading">
         <div>
           <h2 id="library-title">最近结论</h2>
-          <p>{{ categories }} 个分类 · 按最后更新排序</p>
+          <p>按最后更新排序</p>
         </div>
         <button class="text-action" type="button" :disabled="loading" @click="load">
           {{ loading ? '读取中…' : '刷新' }}
@@ -97,17 +89,10 @@ onMounted(load)
           <span class="decision-index">{{ String(index + 1).padStart(2, '0') }}</span>
           <div class="decision-body">
             <div class="card-meta">
-              <span>{{ item.category }} · {{ item.title }}</span>
+              <span>{{ item.title }}</span>
               <span class="updated-at">{{ formatDate(item.updatedAt) }}</span>
             </div>
             <p class="decision-statement">{{ item.conclusion }}</p>
-            <div class="card-footer">
-              <span class="confidence-dot" :data-confidence="item.confidence" />
-              <span>{{ confidenceLabel[item.confidence] }}</span>
-              <span v-for="tag in item.tags.slice(0, 3)" :key="tag" class="inline-tag">
-                #{{ tag }}
-              </span>
-            </div>
           </div>
           <span class="row-arrow" aria-hidden="true">↗</span>
         </article>

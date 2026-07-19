@@ -2,7 +2,7 @@
 
 Conclusion 是一个个人决策知识库，用来保存“已经想清楚的最终结论”。当自己或 AI 再次遇到相似问题时，可以直接复用已有决定、理由、取舍和适用条件，而不是从聊天记录中重新寻找或再次分析。
 
-> 当前状态：后端已支持新增、列表、详情、关键词/分类/标签搜索、并发安全更新和删除；Vue 界面已支持结构化决策推演、列表、详情、新增、编辑和确认删除，依据区域支持 Markdown。网页搜索控件尚未实现。
+> 当前状态：后端已支持新增、列表、详情、搜索、并发安全更新和删除；Vue 界面只保留标题、一句话结论和 Markdown 详情三个编辑内容，并支持列表、详情、编辑和确认删除。
 
 ## Screenshots
 
@@ -20,25 +20,15 @@ Conclusion 是一个个人决策知识库，用来保存“已经想清楚的最
 
 ![新增 Conclusion](screenshots/create.png)
 
-### 决策工作台
-
-![决策工作台](screenshots/decision-workbench.png)
-
-### 已保存的决策路径
-
-![已保存的决策路径](screenshots/decision-path.png)
-
 截图生成方式和后续页面的命名约定见 [`screenshots/`](screenshots/README.md)。任何真实投资、健康或生活决策数据都不得出现在 README 截图中。
 
 ## MVP 功能
 
 - 记录最终决定及其主要原因
-- 在拍板前按需使用经验复盘、穷查理原则、极端/逆向、时间、不行动和可逆性模型
-- 保留已经接受的缺点、放弃的方案和适用条件
+- AI 在拍板前可依次使用经验复盘、穷查理原则、极端/逆向、时间、不行动和可逆性模型
+- 详情使用一篇 Markdown 自由记录理由、例外、链接、图片和重新评估条件
 - 新增、查看、编辑和删除 Conclusion
 - 按标题、问题、结论和原因进行关键词搜索
-- 按分类和标签筛选
-- 标记 `High`、`Medium` 或 `Low` 置信度
 - 后续通过 FengDock MCP 供 ChatGPT 查询、新增和更新 Conclusion
 
 ## MVP 页面
@@ -47,33 +37,23 @@ Conclusion 是一个个人决策知识库，用来保存“已经想清楚的最
 2. 新增 Conclusion
 3. Conclusion 详情页
 4. 编辑和删除
-5. 关键词搜索、分类和标签筛选
+5. 简单关键词搜索
 
 ## 数据结构
 
-每条 Conclusion 包含：
+网页只要求三个内容：
 
 | 字段 | 含义 |
 | --- | --- |
-| `id` | 稳定的唯一标识 |
 | `title` | 标题 |
-| `question` | 原始问题，普通文本 |
 | `conclusion` | 最终结论，最多 280 字符的简短纯文本，建议 1–2 句 |
-| `reason` | 主要原因，支持 GFM Markdown |
-| `tradeoffs` | 接受的缺点或放弃的方案，支持 GFM Markdown |
-| `conditions` | 结论适用和需要重新评估的条件，支持 GFM Markdown |
-| `category` | 分类，如投资、健康、生活、学习 |
-| `tags` | 标签集合 |
-| `confidence` | `High`、`Medium` 或 `Low` |
-| `decisionAnalysis` | 可选的结构化决策推演；每个模型保存一段简析 |
-| `createdAt` | 创建时间 |
-| `updatedAt` | 最后更新时间 |
+| `reason` | Markdown 详情，可自由组织理由、证据、例外和适用条件 |
 
-SQLite 表结构、标签关系、搜索范围和删除语义见 [docs/data-model.md](docs/data-model.md)。
+数据库继续保留 ID、时间、搜索元数据和旧版结构化字段，保证历史记录与 MCP 兼容；它们不再成为网页表单的必填项。旧记录的原始问题、取舍、条件和模型分析会在详情页合并为 Markdown 小节。完整 SQLite 结构和删除语义见 [docs/data-model.md](docs/data-model.md)。
 
-## 决策工作台
+## AI 思考模型
 
-新增或编辑 Conclusion 时，依次使用七个模型，再写最终结论：
+思考模型属于 AI/MCP 工作流，不占用手动新增页面。用户要求使用思考模型时，AI 依次使用七个模型，再写最终结论：
 
 - 经验之谈：先找相似 Conclusion，再区分共同规律和本次差异
 - 穷查理原则检查：从风险、独立判断、准备、谦逊、耐心等主题排查遗漏
@@ -83,7 +63,7 @@ SQLite 表结构、标签关系、搜索范围和删除语义见 [docs/data-mode
 - 不行动分析：比较保持现状避免的成本和错失的价值
 - 可逆性判断：区分单向门与双向门，优先设计最小可逆试验
 
-每个模型只有名称和几句话的解释，不再拆成多问题问卷；应用模型后只记录一段简析。用户让 AI “使用思考模型”时，MCP 会返回完整清单，AI 按顺序把全部模型各过一遍，再汇总最终结论。“经验之谈”会先检索已有 Conclusion；没有先例时明确说明，不编造经验。模型定义保存在后端注册表，网页与 MCP 读取同一份数据；通过 API/MCP 新增自定义模型后，无需修改前端即可出现。简析以 `modelId + modelVersion + answers.analysis` 保存。模型边界和扩展原则见 [docs/decision-models.md](docs/decision-models.md)。
+每个模型只有名称和几句话的解释，不再拆成问卷；应用模型后只记录一段简析。“经验之谈”会先检索已有 Conclusion；没有先例时明确说明，不编造经验。简析以 `modelId + modelVersion + answers.analysis` 保存，并在详情页转换成 Markdown 展示。模型边界和扩展原则见 [docs/decision-models.md](docs/decision-models.md)。
 
 ## API
 
@@ -104,7 +84,7 @@ Planned    GET    /api/tags
 
 `PATCH` 接受部分字段，但必须同时提交客户端最后读取到的 `expectedUpdatedAt`。如果记录已被网页、MCP 或其他写入者修改，接口返回 `409 Conflict` 和最新的 `currentUpdatedAt`，避免静默覆盖。
 
-最终结论使用简短纯文本，保证在列表和详情中一眼读完。原因、取舍和适用条件保存 Markdown 原文；界面仅支持渲染 Markdown 中的公网 `https://` 图片 URL，Conclusion 不提供图片上传或本地图片托管。列表接口支持关键词、分类、标签和结果上限参数；关键词匹配标题、问题、结论和原因。具体请求/响应契约由测试固定。
+最终结论使用简短纯文本，保证在列表中一眼读完。详情保存并呈现 Markdown 原文；界面仅渲染 Markdown 中的公网 `https://` 图片 URL，Conclusion 不提供图片上传或本地图片托管。列表接口仍支持关键词和兼容元数据筛选。具体请求/响应契约由测试固定。
 
 ## 架构
 
