@@ -2,7 +2,7 @@
 
 Conclusion 是一个个人决策知识库，用来保存“已经想清楚的最终结论”。当自己或 AI 再次遇到相似问题时，可以直接复用已有决定、理由、取舍和适用条件，而不是从聊天记录中重新寻找或再次分析。
 
-> 当前状态：后端已支持新增、列表、详情、搜索、并发安全更新和删除；Vue 界面只保留结论和 Markdown 详情两个编辑内容，并支持列表、详情、编辑和确认删除。
+> 当前状态：后端已支持 Conclusion 和版本化思考模型的读写；Vue 界面提供简洁的 Conclusion 编辑流程，以及思考模型注册表的查看、新增和版本化更新。
 
 ## Screenshots
 
@@ -29,6 +29,7 @@ Conclusion 是一个个人决策知识库，用来保存“已经想清楚的最
 - 详情使用一篇 Markdown 自由记录理由、例外、链接、图片和重新评估条件
 - 新增、查看、编辑和删除 Conclusion
 - 按标题、问题、结论和原因进行关键词搜索
+- 查看、新增和版本化更新思考模型
 - 后续通过 FengDock MCP 供 ChatGPT 查询、新增和更新 Conclusion
 
 ## MVP 页面
@@ -38,6 +39,7 @@ Conclusion 是一个个人决策知识库，用来保存“已经想清楚的最
 3. Conclusion 详情页
 4. 编辑和删除
 5. 简单关键词搜索
+6. 思考模型管理
 
 ## 数据结构
 
@@ -78,6 +80,7 @@ Available  DELETE /api/conclusions/{id}
 Available  POST   /api/decision-models
 Available  GET    /api/decision-models
 Available  GET    /api/decision-models/{id}
+Available  PATCH  /api/decision-models/{id}
 Planned    GET    /api/tags
 ```
 
@@ -169,6 +172,7 @@ MCP 由 FengDock 的统一 OAuth 服务对外提供。读取工具：
 - `create_conclusion`
 - `update_conclusion`
 - `create_decision_model`
+- `update_decision_model`
 
 决策模型读取工具：
 
@@ -179,7 +183,7 @@ MCP 由 FengDock 的统一 OAuth 服务对外提供。读取工具：
 
 Conclusion 的 `app/db.py` 提供可复用读写函数，FengDock 像加载 `vendor/fire/app/db.py` 一样加载它们。读取工具使用只读连接；写入工具使用普通事务连接，并通过 MCP annotations 明确标记副作用。MVP 暂不开放 `delete_conclusion`，删除仍在 UI 中由用户确认。
 
-模型更新暂不原地覆盖：历史 Conclusion 已引用具体 `modelVersion`，后续应以“创建新版本”实现 `update_decision_model`。完整工具契约和 AI 使用流程见 [docs/mcp-contract.md](docs/mcp-contract.md)。
+模型更新不会原地覆盖：`update_decision_model` 校验调用方最后读取到的 `expectedVersion`，再创建 `version + 1`；历史 Conclusion 继续引用旧版本。网页的“思考模型”管理页使用相同的版本化更新规则。完整工具契约和 AI 使用流程见 [docs/mcp-contract.md](docs/mcp-contract.md)。
 
 ## 暂时不做
 

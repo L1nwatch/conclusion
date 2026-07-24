@@ -15,6 +15,18 @@ export interface DecisionModelListResponse {
   items: DecisionModelDefinition[]
 }
 
+export interface DecisionModelCreateInput {
+  id: string
+  name: string
+  explanation: string
+}
+
+export interface DecisionModelUpdateInput {
+  name: string
+  explanation: string
+  expectedVersion: number
+}
+
 export interface DecisionModelRun {
   modelId: string
   modelVersion: number

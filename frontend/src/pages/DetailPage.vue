@@ -24,7 +24,7 @@ async function load() {
   try {
     const [conclusion, modelResponse] = await Promise.all([
       getConclusion(Number(route.params.id)),
-      listDecisionModels(),
+      listDecisionModels(true),
     ])
     record.value = conclusion
     decisionDefinitions.value = modelResponse.items

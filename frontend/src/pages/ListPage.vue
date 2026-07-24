@@ -43,9 +43,14 @@ onMounted(load)
         <h1>不再重复思考。</h1>
         <p>只保存已经拍板的答案。</p>
       </div>
-      <el-button type="primary" size="large" @click="router.push({ name: 'create' })">
-        + 记一条结论
-      </el-button>
+      <div class="library-actions">
+        <el-button size="large" @click="router.push({ name: 'decision-models' })">
+          思考模型
+        </el-button>
+        <el-button type="primary" size="large" @click="router.push({ name: 'create' })">
+          + 记一条结论
+        </el-button>
+      </div>
     </header>
 
     <section class="content-panel" aria-labelledby="library-title">

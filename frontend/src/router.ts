@@ -6,6 +6,11 @@ export default createRouter({
   routes: [
     { path: '/', name: 'list', component: ListPage },
     {
+      path: '/decision-models',
+      name: 'decision-models',
+      component: () => import('./pages/DecisionModelsPage.vue'),
+    },
+    {
       path: '/conclusions/new',
       name: 'create',
       component: () => import('./pages/FormPage.vue'),

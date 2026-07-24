@@ -4,6 +4,9 @@ import type {
   ConclusionRecord,
   ConclusionUpdateInput,
   DecisionModelListResponse,
+  DecisionModelCreateInput,
+  DecisionModelDefinition,
+  DecisionModelUpdateInput,
 } from './types'
 
 const apiBase = (import.meta.env.VITE_API_BASE ?? '').replace(/\/$/, '')
@@ -46,8 +49,33 @@ export function getConclusion(id: number): Promise<ConclusionRecord> {
   return requestJson(`/api/conclusions/${id}`)
 }
 
-export function listDecisionModels(): Promise<DecisionModelListResponse> {
-  return requestJson('/api/decision-models')
+export function listDecisionModels(includeHistory = false): Promise<DecisionModelListResponse> {
+  return requestJson(
+    includeHistory
+      ? '/api/decision-models?includeHistory=true'
+      : '/api/decision-models',
+  )
+}
+
+export function createDecisionModel(
+  payload: DecisionModelCreateInput,
+): Promise<DecisionModelDefinition> {
+  return requestJson('/api/decision-models', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+export function updateDecisionModel(
+  modelId: string,
+  payload: DecisionModelUpdateInput,
+): Promise<DecisionModelDefinition> {
+  return requestJson(`/api/decision-models/${modelId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
 }
 
 export function createConclusion(payload: ConclusionInput): Promise<ConclusionRecord> {
