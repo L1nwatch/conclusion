@@ -8,7 +8,7 @@ Conclusion 不启动独立 MCP server。FengDock 的统一 OAuth MCP 加载 `app
 
 - 副作用：无，使用只读连接
 - 参数：无
-- 返回：按固定顺序排列的全部模型；每个模型只有 `name` 和 `explanation` 两个业务字段，技术 ID 作为 map key
+- 返回：按固定顺序排列的全部当前模型；每个模型只有 `name` 和 `explanation` 两个业务字段，技术 ID 作为 map key，`versions` 提供更新所需的当前版本
 - 用途：用户要求“使用思考模型”时，必须逐个应用返回的全部模型，每个模型简析几句话
 
 ### `get_decision_model`
@@ -25,11 +25,15 @@ Conclusion 不启动独立 MCP server。FengDock 的统一 OAuth MCP 加载 `app
 - 返回：创建的 version 1 模型
 - 约束：ID 稳定且唯一；解释保持简短，最多几句话和一个小例子；重复 ID 返回冲突
 
-### `update_decision_model`（计划）
+### `update_decision_model`
 
-不得原地覆盖现有模型。实现版本历史后，该工具创建 `version + 1`，旧版本继续用于解释历史 Conclusion。
+- 副作用：创建新的不可变模型版本，使用写连接
+- 参数：`model_id`、`expected_version`、新的 `name` 和 `explanation`
+- 返回：新创建的 `version + 1` 模型
+- 并发：`expected_version` 不是当前版本时返回冲突和 `currentVersion`
+- 历史：不原地覆盖现有版本，旧版本继续用于解释历史 Conclusion
 
-MVP 不提供 `delete_decision_model`。
+不提供 `delete_decision_model`。
 
 ## 推荐 AI 工作流
 
@@ -57,6 +61,6 @@ MVP 不提供 `delete_decision_model`。
 ## MCP annotations
 
 - `list_decision_models`、`get_decision_model`：`readOnlyHint: true`
-- `create_decision_model`：`readOnlyHint: false`、`destructiveHint: false`、`idempotentHint: false`
+- `create_decision_model`、`update_decision_model`：`readOnlyHint: false`、`destructiveHint: false`、`idempotentHint: false`
 - `create_conclusion`、`update_conclusion` 同样属于写操作
 - 删除工具在 MVP 中不存在

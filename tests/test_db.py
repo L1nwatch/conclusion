@@ -145,6 +145,53 @@ def test_init_db_migrates_existing_conclusions_with_default_conditions(tmp_path:
     assert migrated["conditions"] == ""
 
 
+def test_init_db_migrates_legacy_decision_models_to_versioned_primary_key(
+    tmp_path: Path,
+) -> None:
+    database_path = tmp_path / "legacy-models.sqlite3"
+    with closing(sqlite3.connect(database_path)) as connection:
+        connection.execute(
+            """
+            CREATE TABLE decision_models (
+                id TEXT PRIMARY KEY,
+                version INTEGER NOT NULL CHECK (version = 1),
+                name TEXT NOT NULL,
+                short_name TEXT NOT NULL,
+                description TEXT NOT NULL,
+                prompts_json TEXT NOT NULL,
+                source_name TEXT NOT NULL DEFAULT '',
+                source_url TEXT NOT NULL DEFAULT '',
+                is_builtin INTEGER NOT NULL CHECK (is_builtin IN (0, 1)),
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO decision_models VALUES (
+                'legacy-model', 1, '旧模型', '旧模型', '保留这段说明。', '[]',
+                '', '', 0, '2026-07-01T00:00:00Z', '2026-07-01T00:00:00Z'
+            )
+            """
+        )
+        connection.commit()
+
+    with connect(database_path) as connection:
+        init_db(connection)
+        primary_key = {
+            row["name"]: row["pk"]
+            for row in connection.execute("PRAGMA table_info(decision_models)").fetchall()
+            if row["pk"]
+        }
+        legacy = connection.execute(
+            "SELECT name, description FROM decision_models WHERE id = 'legacy-model'"
+        ).fetchone()
+
+    assert primary_key == {"id": 1, "version": 2}
+    assert dict(legacy) == {"name": "旧模型", "description": "保留这段说明。"}
+
+
 @pytest.mark.parametrize(
     ("field", "invalid_value"),
     [

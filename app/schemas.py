@@ -69,7 +69,7 @@ class DecisionModelRecord(DecisionModelCreate):
 
     model_config = ConfigDict(populate_by_name=True)
 
-    version: Literal[1] = 1
+    version: int = Field(ge=1)
     is_builtin: bool = Field(alias="isBuiltin")
     created_at: datetime = Field(alias="createdAt")
     updated_at: datetime = Field(alias="updatedAt")
@@ -78,6 +78,21 @@ class DecisionModelRecord(DecisionModelCreate):
 class DecisionModelList(BaseModel):
     count: int
     items: list[DecisionModelRecord]
+
+
+class DecisionModelUpdate(BaseModel):
+    """Fields used to create the next immutable model version."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    name: str = Field(min_length=1, max_length=120)
+    explanation: str = Field(min_length=1, max_length=800)
+    expected_version: int = Field(alias="expectedVersion", ge=1)
+
+    @field_validator("name", "explanation", mode="before")
+    @classmethod
+    def strip_text(cls, value: object) -> object:
+        return _strip_outer_whitespace(value)
 
 
 class DecisionModelRun(BaseModel):

@@ -45,8 +45,8 @@ JSON 顶层包含 `version` 和 `models`。每次模型运行保存稳定的 `mo
 
 | 字段 | SQLite 类型 | 约束/说明 |
 | --- | --- | --- |
-| `id` | `TEXT` | 稳定 slug，主键，创建后不复用 |
-| `version` | `INTEGER` | 当前固定为 `1`，为后续版本历史预留 |
+| `id` | `TEXT` | 稳定 slug，与 `version` 组成复合主键，创建后不复用 |
+| `version` | `INTEGER` | 从 `1` 递增，与 `id` 组成复合主键 |
 | `name` | `TEXT` | 展示名称 |
 | `short_name` | `TEXT` | 紧凑英文或符号标识 |
 | `description` | `TEXT` | 模型用途说明 |
@@ -57,7 +57,7 @@ JSON 顶层包含 `version` 和 `models`。每次模型运行保存稳定的 `mo
 | `created_at` | `TEXT` | UTC ISO 8601 |
 | `updated_at` | `TEXT` | UTC ISO 8601；当前不可变版本与创建时间相同 |
 
-应用初始化时以 `INSERT ... ON CONFLICT DO NOTHING` 注册七个内置模型，不覆盖数据库中已有定义。MVP 支持列表、详情和创建，不支持覆盖或删除；模型修订将在后续通过新增版本完成。
+应用初始化时以 `INSERT ... ON CONFLICT DO NOTHING` 注册七个内置模型，不覆盖数据库中已有定义。列表和详情默认返回最新版；HTTP/MCP 更新要求 `expectedVersion` 并插入下一版本，旧版本保持可读且继续通过 `modelId + modelVersion` 被历史 Conclusion 引用。列表接口可用 `includeHistory=true` 读取全部版本。不支持删除模型版本。
 
 ## Markdown 和图片
 

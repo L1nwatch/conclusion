@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from app.db import (
     ConclusionUpdateConflictError,
     DecisionModelAlreadyExistsError,
+    DecisionModelUpdateConflictError,
     UnknownDecisionModelError,
     connect,
     create_conclusion,
@@ -23,6 +24,7 @@ from app.db import (
     list_decision_models,
     search_conclusions,
     update_conclusion,
+    update_decision_model,
 )
 from app.schemas import (
     ConclusionCreate,
@@ -32,6 +34,7 @@ from app.schemas import (
     DecisionModelCreate,
     DecisionModelList,
     DecisionModelRecord,
+    DecisionModelUpdate,
 )
 
 
@@ -95,18 +98,52 @@ def create_app(
         response_model=DecisionModelList,
         tags=["decision-models"],
     )
-    def get_decision_models() -> dict[str, object]:
+    def get_decision_models(
+        include_history: bool = Query(default=False, alias="includeHistory"),
+    ) -> dict[str, object]:
         with connect(database_path, read_only=True) as connection:
-            return list_decision_models(connection)
+            return list_decision_models(connection, include_history=include_history)
 
     @app.get(
         "/api/decision-models/{model_id}",
         response_model=DecisionModelRecord,
         tags=["decision-models"],
     )
-    def get_decision_model_by_id(model_id: str) -> dict[str, object]:
+    def get_decision_model_by_id(
+        model_id: str,
+        version: int | None = Query(default=None, ge=1),
+    ) -> dict[str, object]:
         with connect(database_path, read_only=True) as connection:
-            record = get_decision_model(connection, model_id)
+            record = get_decision_model(connection, model_id, version)
+        if record is None:
+            raise HTTPException(status_code=404, detail="Decision model not found")
+        return record
+
+    @app.patch(
+        "/api/decision-models/{model_id}",
+        response_model=DecisionModelRecord,
+        tags=["decision-models"],
+    )
+    def patch_decision_model(
+        model_id: str,
+        payload: DecisionModelUpdate,
+    ) -> dict[str, object]:
+        try:
+            with connect(database_path) as connection:
+                record = update_decision_model(
+                    connection,
+                    model_id,
+                    payload.model_dump(exclude={"expected_version"}),
+                    expected_version=payload.expected_version,
+                )
+        except DecisionModelUpdateConflictError as error:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "message": str(error),
+                    "currentVersion": error.current_version,
+                },
+            ) from error
         if record is None:
             raise HTTPException(status_code=404, detail="Decision model not found")
         return record

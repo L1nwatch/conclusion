@@ -100,6 +100,94 @@ def test_create_decision_model_rejects_duplicate_id(tmp_path: Path) -> None:
     assert duplicate.status_code == 409
 
 
+def test_update_decision_model_creates_version_and_preserves_history(
+    tmp_path: Path,
+) -> None:
+    database_path = tmp_path / "conclusion.sqlite3"
+    with TestClient(create_app(database_path)) as client:
+        assert client.post("/api/decision-models", json=CUSTOM_MODEL).status_code == 201
+        updated = client.patch(
+            "/api/decision-models/constraint-check",
+            json={
+                "name": "关键约束检查",
+                "explanation": "先确认硬约束，再找出真正限制结果的瓶颈。",
+                "expectedVersion": 1,
+            },
+        )
+        latest = client.get("/api/decision-models/constraint-check")
+        version_one = client.get(
+            "/api/decision-models/constraint-check",
+            params={"version": 1},
+        )
+        history = client.get(
+            "/api/decision-models",
+            params={"includeHistory": True},
+        )
+        stale = client.patch(
+            "/api/decision-models/constraint-check",
+            json={
+                "name": "过期修改",
+                "explanation": "这次写入应该被并发保护拒绝。",
+                "expectedVersion": 1,
+            },
+        )
+        historical_conclusion = client.post(
+            "/api/conclusions",
+            json={
+                **CONCLUSION_PAYLOAD,
+                "decisionAnalysis": {
+                    "version": 1,
+                    "models": [
+                        {
+                            "modelId": "constraint-check",
+                            "modelVersion": 1,
+                            "answers": {"analysis": "旧版本仍然可以被引用。"},
+                        }
+                    ],
+                },
+            },
+        )
+
+    assert updated.status_code == 200
+    assert updated.json()["version"] == 2
+    assert updated.json()["name"] == "关键约束检查"
+    assert latest.json() == updated.json()
+    assert version_one.json()["name"] == "约束检查"
+    assert version_one.json()["version"] == 1
+    assert history.json()["count"] == 9
+    assert stale.status_code == 409
+    assert stale.json()["detail"]["currentVersion"] == 2
+    assert historical_conclusion.status_code == 201
+
+    with connect(database_path, read_only=True) as connection:
+        versions = connection.execute(
+            """
+            SELECT version, name
+            FROM decision_models
+            WHERE id = 'constraint-check'
+            ORDER BY version
+            """
+        ).fetchall()
+    assert [(row["version"], row["name"]) for row in versions] == [
+        (1, "约束检查"),
+        (2, "关键约束检查"),
+    ]
+
+
+def test_update_missing_decision_model_returns_404(tmp_path: Path) -> None:
+    with TestClient(create_app(tmp_path / "conclusion.sqlite3")) as client:
+        response = client.patch(
+            "/api/decision-models/missing-model",
+            json={
+                "name": "不存在",
+                "explanation": "无法更新一个不存在的模型。",
+                "expectedVersion": 1,
+            },
+        )
+
+    assert response.status_code == 404
+
+
 @pytest.mark.parametrize(
     "change",
     [
@@ -162,7 +250,9 @@ def test_get_missing_decision_model_returns_404(tmp_path: Path) -> None:
     assert response.status_code == 404
 
 
-def test_builtin_refresh_keeps_legacy_prompt_keys_readable(tmp_path: Path) -> None:
+def test_builtin_migration_keeps_legacy_definition_and_prompt_keys_readable(
+    tmp_path: Path,
+) -> None:
     database_path = tmp_path / "conclusion.sqlite3"
     with TestClient(create_app(database_path)):
         pass
@@ -198,7 +288,7 @@ def test_builtin_refresh_keeps_legacy_prompt_keys_readable(tmp_path: Path) -> No
         conclusion = client.post("/api/conclusions", json=payload)
 
     assert refreshed.status_code == 200
-    assert refreshed.json()["explanation"] != "旧版多问题说明"
+    assert refreshed.json()["explanation"] == "旧版多问题说明"
     assert conclusion.status_code == 201
 
     with connect(database_path, read_only=True) as connection:

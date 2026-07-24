@@ -76,6 +76,14 @@ class DecisionModelAlreadyExistsError(Exception):
     """Raised when a new decision model reuses an existing stable ID."""
 
 
+class DecisionModelUpdateConflictError(Exception):
+    """Raised when an update is based on a stale model version."""
+
+    def __init__(self, current_version: int) -> None:
+        super().__init__("Decision model was modified by another writer")
+        self.current_version = current_version
+
+
 class UnknownDecisionModelError(Exception):
     """Raised when analysis references a model or prompt that is not registered."""
 
@@ -189,8 +197,8 @@ def init_db(connection: sqlite3.Connection) -> None:
         );
 
         CREATE TABLE IF NOT EXISTS decision_models (
-            id TEXT PRIMARY KEY,
-            version INTEGER NOT NULL CHECK (version = 1),
+            id TEXT NOT NULL,
+            version INTEGER NOT NULL CHECK (version >= 1),
             name TEXT NOT NULL,
             short_name TEXT NOT NULL,
             description TEXT NOT NULL,
@@ -199,7 +207,8 @@ def init_db(connection: sqlite3.Connection) -> None:
             source_url TEXT NOT NULL DEFAULT '',
             is_builtin INTEGER NOT NULL CHECK (is_builtin IN (0, 1)),
             created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (id, version)
         );
         """
     )
@@ -211,12 +220,56 @@ def init_db(connection: sqlite3.Connection) -> None:
         connection.execute(
             "ALTER TABLE conclusions ADD COLUMN conditions TEXT NOT NULL DEFAULT ''"
         )
+    _migrate_decision_model_versions(connection)
     _seed_builtin_decision_models(connection)
     connection.commit()
 
 
+def _migrate_decision_model_versions(connection: sqlite3.Connection) -> None:
+    """Replace the legacy one-row-per-ID registry with immutable versions."""
+    primary_key = {
+        row["name"]: int(row["pk"])
+        for row in connection.execute("PRAGMA table_info(decision_models)").fetchall()
+        if int(row["pk"]) > 0
+    }
+    if primary_key == {"id": 1, "version": 2}:
+        return
+
+    connection.executescript(
+        """
+        ALTER TABLE decision_models RENAME TO decision_models_legacy;
+
+        CREATE TABLE decision_models (
+            id TEXT NOT NULL,
+            version INTEGER NOT NULL CHECK (version >= 1),
+            name TEXT NOT NULL,
+            short_name TEXT NOT NULL,
+            description TEXT NOT NULL,
+            prompts_json TEXT NOT NULL,
+            source_name TEXT NOT NULL DEFAULT '',
+            source_url TEXT NOT NULL DEFAULT '',
+            is_builtin INTEGER NOT NULL CHECK (is_builtin IN (0, 1)),
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (id, version)
+        );
+
+        INSERT INTO decision_models (
+            id, version, name, short_name, description, prompts_json,
+            source_name, source_url, is_builtin, created_at, updated_at
+        )
+        SELECT
+            id, version, name, short_name, description, prompts_json,
+            source_name, source_url, is_builtin, created_at, updated_at
+        FROM decision_models_legacy;
+
+        DROP TABLE decision_models_legacy;
+        """
+    )
+
+
 def _seed_builtin_decision_models(connection: sqlite3.Connection) -> None:
-    """Register built-ins and refresh their two maintained business fields."""
+    """Register immutable version-one built-ins when they do not exist."""
     timestamp = utc_timestamp()
     for model in BUILTIN_DECISION_MODELS:
         connection.execute(
@@ -225,15 +278,7 @@ def _seed_builtin_decision_models(connection: sqlite3.Connection) -> None:
                 id, version, name, short_name, description, prompts_json,
                 source_name, source_url, is_builtin, created_at, updated_at
             ) VALUES (?, 1, ?, ?, ?, ?, ?, ?, 1, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET
-                name = excluded.name,
-                short_name = excluded.short_name,
-                description = excluded.description,
-                source_name = '',
-                source_url = '',
-                updated_at = excluded.updated_at
-            WHERE decision_models.name != excluded.name
-               OR decision_models.description != excluded.description
+            ON CONFLICT(id, version) DO NOTHING
             """,
             (
                 model["id"],
@@ -363,10 +408,14 @@ def _validate_decision_analysis(
         model_id = run["model_id"]
         model_version = run.get("model_version", 1)
         row = connection.execute(
-            "SELECT version, prompts_json FROM decision_models WHERE id = ?",
-            (model_id,),
+            """
+            SELECT prompts_json
+            FROM decision_models
+            WHERE id = ? AND version = ?
+            """,
+            (model_id, model_version),
         ).fetchone()
-        if row is None or int(row["version"]) != model_version:
+        if row is None:
             raise UnknownDecisionModelError(
                 f"Unknown decision model version: {model_id}@{model_version}"
             )
@@ -393,13 +442,30 @@ def _serialize_decision_model(row: sqlite3.Row) -> dict[str, Any]:
     return record
 
 
-def list_decision_models(connection: sqlite3.Connection) -> dict[str, Any]:
-    """Return all registered decision models in stable creation order."""
-    rows = connection.execute(
+def list_decision_models(
+    connection: sqlite3.Connection,
+    *,
+    include_history: bool = False,
+) -> dict[str, Any]:
+    """Return current models, optionally including every immutable version."""
+    source_sql = (
+        "SELECT model.* FROM decision_models AS model"
+        if include_history
+        else """
+        SELECT model.*
+        FROM decision_models AS model
+        JOIN (
+            SELECT id, max(version) AS version
+            FROM decision_models
+            GROUP BY id
+        ) AS latest
+          ON latest.id = model.id AND latest.version = model.version
         """
-        SELECT *
-        FROM decision_models
-        ORDER BY CASE id
+    )
+    rows = connection.execute(
+        f"""
+        {source_sql}
+        ORDER BY CASE model.id
             WHEN 'precedent-review' THEN 0
             WHEN 'munger-checklist' THEN 1
             WHEN 'scenario-range' THEN 2
@@ -408,7 +474,7 @@ def list_decision_models(connection: sqlite3.Connection) -> dict[str, Any]:
             WHEN 'inaction-value' THEN 5
             WHEN 'reversibility' THEN 6
             ELSE 100
-        END, created_at, id
+        END, model.created_at, model.id, model.version
         """
     ).fetchall()
     return {"count": len(rows), "items": [_serialize_decision_model(row) for row in rows]}
@@ -417,12 +483,25 @@ def list_decision_models(connection: sqlite3.Connection) -> dict[str, Any]:
 def get_decision_model(
     connection: sqlite3.Connection,
     model_id: str,
+    version: int | None = None,
 ) -> dict[str, Any] | None:
-    """Return one registered decision model by stable ID."""
-    row = connection.execute(
-        "SELECT * FROM decision_models WHERE id = ?",
-        (model_id,),
-    ).fetchone()
+    """Return one model version, defaulting to the latest."""
+    if version is None:
+        row = connection.execute(
+            """
+            SELECT *
+            FROM decision_models
+            WHERE id = ?
+            ORDER BY version DESC
+            LIMIT 1
+            """,
+            (model_id,),
+        ).fetchone()
+    else:
+        row = connection.execute(
+            "SELECT * FROM decision_models WHERE id = ? AND version = ?",
+            (model_id, version),
+        ).fetchone()
     return _serialize_decision_model(row) if row is not None else None
 
 
@@ -462,6 +541,53 @@ def create_decision_model(
     if record is None:  # pragma: no cover - successful insert guarantees the row
         raise RuntimeError("Created decision model could not be loaded")
     return record
+
+
+def update_decision_model(
+    connection: sqlite3.Connection,
+    model_id: str,
+    values: Mapping[str, Any],
+    *,
+    expected_version: int,
+) -> dict[str, Any] | None:
+    """Create the next immutable version of an existing decision model."""
+    current = get_decision_model(connection, model_id)
+    if current is None:
+        return None
+    if current["version"] != expected_version:
+        raise DecisionModelUpdateConflictError(current["version"])
+
+    timestamp = utc_timestamp()
+    next_version = current["version"] + 1
+    try:
+        connection.execute(
+            """
+            INSERT INTO decision_models (
+                id, version, name, short_name, description, prompts_json,
+                source_name, source_url, is_builtin, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                model_id,
+                next_version,
+                values["name"],
+                values["name"],
+                values["explanation"],
+                "[]",
+                "",
+                "",
+                int(current["is_builtin"]),
+                timestamp,
+                timestamp,
+            ),
+        )
+    except sqlite3.IntegrityError as error:
+        latest = get_decision_model(connection, model_id)
+        if latest is not None and latest["version"] != expected_version:
+            raise DecisionModelUpdateConflictError(latest["version"]) from error
+        raise
+
+    return get_decision_model(connection, model_id, next_version)
 
 
 def _records_with_tags(
