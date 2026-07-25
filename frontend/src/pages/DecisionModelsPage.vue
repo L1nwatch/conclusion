@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
 import {
   ApiError,
   createDecisionModel,
+  deleteDecisionModel,
   listDecisionModels,
   updateDecisionModel,
 } from '../api'
@@ -14,6 +15,7 @@ const router = useRouter()
 const items = ref<DecisionModelDefinition[]>([])
 const loading = ref(true)
 const saving = ref(false)
+const deletingId = ref('')
 const error = ref('')
 const dialogOpen = ref(false)
 const editing = ref<DecisionModelDefinition | null>(null)
@@ -62,9 +64,9 @@ async function save() {
       await updateDecisionModel(editing.value.id, {
         name: form.name,
         explanation: form.explanation,
-        expectedVersion: editing.value.version,
+        expectedUpdatedAt: editing.value.updatedAt,
       })
-      ElMessage.success('已创建新的模型版本')
+      ElMessage.success('思考模型已更新')
     } else {
       await createDecisionModel({
         id: form.id,
@@ -90,6 +92,35 @@ async function save() {
   }
 }
 
+async function remove(model: DecisionModelDefinition) {
+  if (deletingId.value) return
+  try {
+    await ElMessageBox.confirm(
+      `删除「${model.name}」后，它将不再用于新的思考分析。历史结论仍可显示原有分析。`,
+      '确认删除这个思考模型？',
+      {
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
+        confirmButtonClass: 'el-button--danger',
+        type: 'warning',
+      },
+    )
+  } catch {
+    return
+  }
+
+  deletingId.value = model.id
+  try {
+    await deleteDecisionModel(model.id)
+    ElMessage.success('思考模型已删除')
+    await load()
+  } catch (reason) {
+    ElMessage.error(reason instanceof Error ? reason.message : '删除失败，请稍后重试')
+  } finally {
+    deletingId.value = ''
+  }
+}
+
 onMounted(load)
 </script>
 
@@ -103,7 +134,7 @@ onMounted(load)
       <div>
         <p class="eyebrow">THINKING MODELS · {{ items.length }}</p>
         <h1>思考模型</h1>
-        <p>查看模型定义；更新会创建新版本，历史 Conclusion 继续引用旧版本。</p>
+        <p>在网页直接创建、编辑和删除模型；历史 Conclusion 的分析内容会保留。</p>
       </div>
       <el-button type="primary" size="large" @click="openCreate">
         + 新建模型
@@ -144,7 +175,19 @@ onMounted(load)
             <code>{{ model.id }}</code>
             <p>{{ model.explanation }}</p>
           </div>
-          <el-button plain @click="openEdit(model)">创建新版本</el-button>
+          <div class="model-card-actions">
+            <el-button plain @click="openEdit(model)">编辑</el-button>
+            <el-button
+              type="danger"
+              plain
+              :loading="deletingId === model.id"
+              :disabled="Boolean(deletingId) && deletingId !== model.id"
+              :data-testid="`delete-decision-model-${model.id}`"
+              @click="remove(model)"
+            >
+              删除
+            </el-button>
+          </div>
         </article>
       </div>
     </section>
@@ -155,14 +198,6 @@ onMounted(load)
       width="min(560px, 92vw)"
       destroy-on-close
     >
-      <el-alert
-        v-if="editing"
-        class="model-version-alert"
-        :title="`将保留 v${editing.version}，并创建 v${editing.version + 1}`"
-        type="info"
-        show-icon
-        :closable="false"
-      />
       <el-form label-position="top">
         <el-form-item label="模型 ID">
           <el-input
@@ -189,7 +224,7 @@ onMounted(load)
       <template #footer>
         <el-button @click="dialogOpen = false">取消</el-button>
         <el-button type="primary" :loading="saving" @click="save">
-          {{ editing ? '创建新版本' : '创建模型' }}
+          {{ editing ? '保存修改' : '创建模型' }}
         </el-button>
       </template>
     </el-dialog>

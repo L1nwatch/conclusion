@@ -24,7 +24,7 @@ export interface DecisionModelCreateInput {
 export interface DecisionModelUpdateInput {
   name: string
   explanation: string
-  expectedVersion: number
+  expectedUpdatedAt: string
 }
 
 export interface DecisionModelRun {

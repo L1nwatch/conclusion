@@ -46,7 +46,7 @@ JSON 顶层包含 `version` 和 `models`。每次模型运行保存稳定的 `mo
 | 字段 | SQLite 类型 | 约束/说明 |
 | --- | --- | --- |
 | `id` | `TEXT` | 稳定 slug，与 `version` 组成复合主键，创建后不复用 |
-| `version` | `INTEGER` | 从 `1` 递增，与 `id` 组成复合主键 |
+| `version` | `INTEGER` | 历史兼容版本，与 `id` 组成复合主键；新建模型为 `1` |
 | `name` | `TEXT` | 展示名称 |
 | `short_name` | `TEXT` | 紧凑英文或符号标识 |
 | `description` | `TEXT` | 模型用途说明 |
@@ -55,9 +55,10 @@ JSON 顶层包含 `version` 和 `models`。每次模型运行保存稳定的 `mo
 | `source_url` | `TEXT` | 可选公网 HTTPS 来源 |
 | `is_builtin` | `INTEGER` | `1` 为内置模型，`0` 为 API/MCP 创建模型 |
 | `created_at` | `TEXT` | UTC ISO 8601 |
-| `updated_at` | `TEXT` | UTC ISO 8601；当前不可变版本与创建时间相同 |
+| `updated_at` | `TEXT` | UTC ISO 8601；每次原地编辑时更新 |
+| `deleted_at` | `TEXT` | 可空；网页删除时写入 UTC 时间并从当前注册表隐藏 |
 
-应用初始化时以 `INSERT ... ON CONFLICT DO NOTHING` 注册七个内置模型，不覆盖数据库中已有定义。列表和详情默认返回最新版；HTTP/MCP 更新要求 `expectedVersion` 并插入下一版本，旧版本保持可读且继续通过 `modelId + modelVersion` 被历史 Conclusion 引用。列表接口可用 `includeHistory=true` 读取全部版本。不支持删除模型版本。
+应用初始化时以 `INSERT ... ON CONFLICT DO NOTHING` 注册七个内置模型，不覆盖数据库中已有定义或删除标记。列表和详情默认只返回未删除模型；HTTP/MCP 更新要求 `expectedUpdatedAt` 并原地修改当前定义。网页删除使用软删除，`includeHistory=true` 仍可读取历史定义，以便已保存的 Conclusion 继续通过 `modelId + modelVersion` 显示分析。
 
 ## Markdown 和图片
 

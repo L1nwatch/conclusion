@@ -150,8 +150,9 @@ textarea {
   line-height: 1.72;
 }
 
-.model-version-alert {
-  margin-bottom: 20px;
+.model-card-actions {
+  display: flex;
+  gap: 8px;
 }
 
 .content-panel {
@@ -864,7 +865,7 @@ textarea {
     padding: 22px 2px 23px 0;
   }
 
-  .model-card > .el-button {
+  .model-card-actions {
     grid-column: 2;
     justify-self: start;
   }

@@ -78,6 +78,10 @@ export function updateDecisionModel(
   })
 }
 
+export async function deleteDecisionModel(modelId: string): Promise<void> {
+  await request(`/api/decision-models/${modelId}`, { method: 'DELETE' })
+}
+
 export function createConclusion(payload: ConclusionInput): Promise<ConclusionRecord> {
   return requestJson('/api/conclusions', {
     method: 'POST',

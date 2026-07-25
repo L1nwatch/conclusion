@@ -77,11 +77,11 @@ class DecisionModelAlreadyExistsError(Exception):
 
 
 class DecisionModelUpdateConflictError(Exception):
-    """Raised when an update is based on a stale model version."""
+    """Raised when an update uses a stale model updated_at value."""
 
-    def __init__(self, current_version: int) -> None:
+    def __init__(self, current_updated_at: str) -> None:
         super().__init__("Decision model was modified by another writer")
-        self.current_version = current_version
+        self.current_updated_at = current_updated_at
 
 
 class UnknownDecisionModelError(Exception):
@@ -208,6 +208,7 @@ def init_db(connection: sqlite3.Connection) -> None:
             is_builtin INTEGER NOT NULL CHECK (is_builtin IN (0, 1)),
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
+            deleted_at TEXT,
             PRIMARY KEY (id, version)
         );
         """
@@ -221,6 +222,7 @@ def init_db(connection: sqlite3.Connection) -> None:
             "ALTER TABLE conclusions ADD COLUMN conditions TEXT NOT NULL DEFAULT ''"
         )
     _migrate_decision_model_versions(connection)
+    _migrate_decision_model_soft_delete(connection)
     _seed_builtin_decision_models(connection)
     connection.commit()
 
@@ -251,6 +253,7 @@ def _migrate_decision_model_versions(connection: sqlite3.Connection) -> None:
             is_builtin INTEGER NOT NULL CHECK (is_builtin IN (0, 1)),
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
+            deleted_at TEXT,
             PRIMARY KEY (id, version)
         );
 
@@ -268,8 +271,18 @@ def _migrate_decision_model_versions(connection: sqlite3.Connection) -> None:
     )
 
 
+def _migrate_decision_model_soft_delete(connection: sqlite3.Connection) -> None:
+    """Add the tombstone used by website-only model deletion."""
+    columns = {
+        row["name"]
+        for row in connection.execute("PRAGMA table_info(decision_models)").fetchall()
+    }
+    if "deleted_at" not in columns:
+        connection.execute("ALTER TABLE decision_models ADD COLUMN deleted_at TEXT")
+
+
 def _seed_builtin_decision_models(connection: sqlite3.Connection) -> None:
-    """Register immutable version-one built-ins when they do not exist."""
+    """Register version-one built-ins when their IDs have never existed."""
     timestamp = utc_timestamp()
     for model in BUILTIN_DECISION_MODELS:
         connection.execute(
@@ -433,6 +446,7 @@ def _validate_decision_analysis(
 
 def _serialize_decision_model(row: sqlite3.Row) -> dict[str, Any]:
     record = dict(row)
+    record.pop("deleted_at")
     record["explanation"] = record.pop("description")
     record.pop("short_name")
     record.pop("prompts_json")
@@ -447,7 +461,7 @@ def list_decision_models(
     *,
     include_history: bool = False,
 ) -> dict[str, Any]:
-    """Return current models, optionally including every immutable version."""
+    """Return active models, optionally including history and soft-deleted rows."""
     source_sql = (
         "SELECT model.* FROM decision_models AS model"
         if include_history
@@ -457,6 +471,7 @@ def list_decision_models(
         JOIN (
             SELECT id, max(version) AS version
             FROM decision_models
+            WHERE deleted_at IS NULL
             GROUP BY id
         ) AS latest
           ON latest.id = model.id AND latest.version = model.version
@@ -485,13 +500,13 @@ def get_decision_model(
     model_id: str,
     version: int | None = None,
 ) -> dict[str, Any] | None:
-    """Return one model version, defaulting to the latest."""
+    """Return one model version, defaulting to the latest active definition."""
     if version is None:
         row = connection.execute(
             """
             SELECT *
             FROM decision_models
-            WHERE id = ?
+            WHERE id = ? AND deleted_at IS NULL
             ORDER BY version DESC
             LIMIT 1
             """,
@@ -509,7 +524,7 @@ def create_decision_model(
     connection: sqlite3.Connection,
     values: Mapping[str, Any],
 ) -> dict[str, Any]:
-    """Register one immutable version-one custom decision model."""
+    """Register one version-one custom decision model."""
     timestamp = utc_timestamp()
     try:
         connection.execute(
@@ -548,46 +563,51 @@ def update_decision_model(
     model_id: str,
     values: Mapping[str, Any],
     *,
-    expected_version: int,
+    expected_updated_at: str,
 ) -> dict[str, Any] | None:
-    """Create the next immutable version of an existing decision model."""
+    """Edit the active model definition in place with optimistic concurrency."""
     current = get_decision_model(connection, model_id)
     if current is None:
         return None
-    if current["version"] != expected_version:
-        raise DecisionModelUpdateConflictError(current["version"])
-
-    timestamp = utc_timestamp()
-    next_version = current["version"] + 1
-    try:
-        connection.execute(
-            """
-            INSERT INTO decision_models (
-                id, version, name, short_name, description, prompts_json,
-                source_name, source_url, is_builtin, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                model_id,
-                next_version,
-                values["name"],
-                values["name"],
-                values["explanation"],
-                "[]",
-                "",
-                "",
-                int(current["is_builtin"]),
-                timestamp,
-                timestamp,
-            ),
-        )
-    except sqlite3.IntegrityError as error:
+    cursor = connection.execute(
+        """
+        UPDATE decision_models
+        SET name = ?, short_name = ?, description = ?, updated_at = ?
+        WHERE id = ? AND version = ? AND updated_at = ? AND deleted_at IS NULL
+        """,
+        (
+            values["name"],
+            values["name"],
+            values["explanation"],
+            utc_timestamp(),
+            model_id,
+            current["version"],
+            expected_updated_at,
+        ),
+    )
+    if cursor.rowcount == 0:
         latest = get_decision_model(connection, model_id)
-        if latest is not None and latest["version"] != expected_version:
-            raise DecisionModelUpdateConflictError(latest["version"]) from error
-        raise
+        if latest is None:
+            return None
+        raise DecisionModelUpdateConflictError(latest["updated_at"])
+    return get_decision_model(connection, model_id, current["version"])
 
-    return get_decision_model(connection, model_id, next_version)
+
+def delete_decision_model(
+    connection: sqlite3.Connection,
+    model_id: str,
+) -> bool:
+    """Soft-delete all versions of one model so historical references remain readable."""
+    timestamp = utc_timestamp()
+    cursor = connection.execute(
+        """
+        UPDATE decision_models
+        SET deleted_at = ?
+        WHERE id = ? AND deleted_at IS NULL
+        """,
+        (timestamp, model_id),
+    )
+    return cursor.rowcount > 0
 
 
 def _records_with_tags(

@@ -25,8 +25,8 @@
 21. 在 FengDock MCP 中加入 `list_decision_models`
 22. 在 FengDock MCP 中加入 `get_decision_model`
 23. 在 FengDock MCP 中加入 `create_decision_model`
-24. 实现不可变模型版本历史和 `update_decision_model`
-25. 增加网页思考模型管理页
+24. 实现带并发保护的 `update_decision_model`
+25. 增加网页思考模型创建、原地编辑和软删除管理页
 
 ## 每个提交的完成条件
 

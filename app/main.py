@@ -18,6 +18,7 @@ from app.db import (
     create_conclusion,
     create_decision_model,
     delete_conclusion,
+    delete_decision_model,
     get_conclusion,
     get_decision_model,
     init_db,
@@ -133,20 +134,33 @@ def create_app(
                 record = update_decision_model(
                     connection,
                     model_id,
-                    payload.model_dump(exclude={"expected_version"}),
-                    expected_version=payload.expected_version,
+                    payload.model_dump(exclude={"expected_updated_at"}),
+                    expected_updated_at=payload.expected_updated_at,
                 )
         except DecisionModelUpdateConflictError as error:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail={
                     "message": str(error),
-                    "currentVersion": error.current_version,
+                    "currentUpdatedAt": error.current_updated_at,
                 },
             ) from error
         if record is None:
             raise HTTPException(status_code=404, detail="Decision model not found")
         return record
+
+    @app.delete(
+        "/api/decision-models/{model_id}",
+        status_code=status.HTTP_204_NO_CONTENT,
+        response_class=Response,
+        tags=["decision-models"],
+    )
+    def delete_decision_model_by_id(model_id: str) -> Response:
+        with connect(database_path) as connection:
+            deleted = delete_decision_model(connection, model_id)
+        if not deleted:
+            raise HTTPException(status_code=404, detail="Decision model not found")
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     @app.get(
         "/api/conclusions",

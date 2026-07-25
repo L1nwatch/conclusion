@@ -100,18 +100,19 @@ def test_create_decision_model_rejects_duplicate_id(tmp_path: Path) -> None:
     assert duplicate.status_code == 409
 
 
-def test_update_decision_model_creates_version_and_preserves_history(
+def test_update_decision_model_edits_current_definition_in_place(
     tmp_path: Path,
 ) -> None:
     database_path = tmp_path / "conclusion.sqlite3"
     with TestClient(create_app(database_path)) as client:
-        assert client.post("/api/decision-models", json=CUSTOM_MODEL).status_code == 201
+        created = client.post("/api/decision-models", json=CUSTOM_MODEL)
+        assert created.status_code == 201
         updated = client.patch(
             "/api/decision-models/constraint-check",
             json={
                 "name": "关键约束检查",
                 "explanation": "先确认硬约束，再找出真正限制结果的瓶颈。",
-                "expectedVersion": 1,
+                "expectedUpdatedAt": created.json()["updatedAt"],
             },
         )
         latest = client.get("/api/decision-models/constraint-check")
@@ -128,7 +129,7 @@ def test_update_decision_model_creates_version_and_preserves_history(
             json={
                 "name": "过期修改",
                 "explanation": "这次写入应该被并发保护拒绝。",
-                "expectedVersion": 1,
+                "expectedUpdatedAt": created.json()["updatedAt"],
             },
         )
         historical_conclusion = client.post(
@@ -149,14 +150,16 @@ def test_update_decision_model_creates_version_and_preserves_history(
         )
 
     assert updated.status_code == 200
-    assert updated.json()["version"] == 2
+    assert updated.json()["version"] == 1
     assert updated.json()["name"] == "关键约束检查"
+    assert updated.json()["createdAt"] == created.json()["createdAt"]
+    assert updated.json()["updatedAt"] != created.json()["updatedAt"]
     assert latest.json() == updated.json()
-    assert version_one.json()["name"] == "约束检查"
+    assert version_one.json()["name"] == "关键约束检查"
     assert version_one.json()["version"] == 1
-    assert history.json()["count"] == 9
+    assert history.json()["count"] == 8
     assert stale.status_code == 409
-    assert stale.json()["detail"]["currentVersion"] == 2
+    assert stale.json()["detail"]["currentUpdatedAt"] == updated.json()["updatedAt"]
     assert historical_conclusion.status_code == 201
 
     with connect(database_path, read_only=True) as connection:
@@ -169,9 +172,62 @@ def test_update_decision_model_creates_version_and_preserves_history(
             """
         ).fetchall()
     assert [(row["version"], row["name"]) for row in versions] == [
-        (1, "约束检查"),
-        (2, "关键约束检查"),
+        (1, "关键约束检查"),
     ]
+
+
+def test_delete_decision_model_hides_it_without_losing_history(tmp_path: Path) -> None:
+    database_path = tmp_path / "conclusion.sqlite3"
+    with TestClient(create_app(database_path)) as client:
+        created = client.post("/api/decision-models", json=CUSTOM_MODEL)
+        assert created.status_code == 201
+        conclusion = client.post(
+            "/api/conclusions",
+            json={
+                **CONCLUSION_PAYLOAD,
+                "decisionAnalysis": {
+                    "version": 1,
+                    "models": [
+                        {
+                            "modelId": "constraint-check",
+                            "modelVersion": 1,
+                            "answers": {"analysis": "保留这段历史分析。"},
+                        }
+                    ],
+                },
+            },
+        )
+        deleted = client.delete("/api/decision-models/constraint-check")
+        listed = client.get("/api/decision-models")
+        fetched = client.get("/api/decision-models/constraint-check")
+        history = client.get(
+            "/api/decision-models",
+            params={"includeHistory": True},
+        )
+        existing_conclusion = client.get(f"/api/conclusions/{conclusion.json()['id']}")
+        repeated = client.delete("/api/decision-models/constraint-check")
+
+    assert deleted.status_code == 204
+    assert "constraint-check" not in {item["id"] for item in listed.json()["items"]}
+    assert fetched.status_code == 404
+    assert "constraint-check" in {item["id"] for item in history.json()["items"]}
+    assert existing_conclusion.json()["decisionAnalysis"]["models"][0]["answers"] == {
+        "analysis": "保留这段历史分析。"
+    }
+    assert repeated.status_code == 404
+
+
+def test_deleted_builtin_model_is_not_reseeded_on_restart(tmp_path: Path) -> None:
+    database_path = tmp_path / "conclusion.sqlite3"
+    with TestClient(create_app(database_path)) as client:
+        assert client.delete("/api/decision-models/time-horizons").status_code == 204
+
+    with TestClient(create_app(database_path)) as client:
+        listed = client.get("/api/decision-models")
+        fetched = client.get("/api/decision-models/time-horizons")
+
+    assert listed.json()["count"] == 6
+    assert fetched.status_code == 404
 
 
 def test_update_missing_decision_model_returns_404(tmp_path: Path) -> None:
@@ -181,7 +237,7 @@ def test_update_missing_decision_model_returns_404(tmp_path: Path) -> None:
             json={
                 "name": "不存在",
                 "explanation": "无法更新一个不存在的模型。",
-                "expectedVersion": 1,
+                "expectedUpdatedAt": "2026-07-24T00:00:00Z",
             },
         )
 

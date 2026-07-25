@@ -192,6 +192,39 @@ def test_init_db_migrates_legacy_decision_models_to_versioned_primary_key(
     assert dict(legacy) == {"name": "旧模型", "description": "保留这段说明。"}
 
 
+def test_init_db_adds_soft_delete_to_existing_versioned_models(tmp_path: Path) -> None:
+    database_path = tmp_path / "versioned-models.sqlite3"
+    with closing(sqlite3.connect(database_path)) as connection:
+        connection.execute(
+            """
+            CREATE TABLE decision_models (
+                id TEXT NOT NULL,
+                version INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                short_name TEXT NOT NULL,
+                description TEXT NOT NULL,
+                prompts_json TEXT NOT NULL,
+                source_name TEXT NOT NULL DEFAULT '',
+                source_url TEXT NOT NULL DEFAULT '',
+                is_builtin INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (id, version)
+            )
+            """
+        )
+        connection.commit()
+
+    with connect(database_path) as connection:
+        init_db(connection)
+        columns = {
+            row["name"]
+            for row in connection.execute("PRAGMA table_info(decision_models)").fetchall()
+        }
+
+    assert "deleted_at" in columns
+
+
 @pytest.mark.parametrize(
     ("field", "invalid_value"),
     [

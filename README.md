@@ -2,7 +2,7 @@
 
 Conclusion 是一个个人决策知识库，用来保存“已经想清楚的最终结论”。当自己或 AI 再次遇到相似问题时，可以直接复用已有决定、理由、取舍和适用条件，而不是从聊天记录中重新寻找或再次分析。
 
-> 当前状态：后端已支持 Conclusion 和版本化思考模型的读写；Vue 界面提供简洁的 Conclusion 编辑流程，以及思考模型注册表的查看、新增和版本化更新。
+> 当前状态：后端已支持 Conclusion 和思考模型的读写；Vue 界面提供简洁的 Conclusion 编辑流程，以及思考模型注册表的查看、新增、原地编辑和软删除。
 
 ## Screenshots
 
@@ -29,7 +29,7 @@ Conclusion 是一个个人决策知识库，用来保存“已经想清楚的最
 - 详情使用一篇 Markdown 自由记录理由、例外、链接、图片和重新评估条件
 - 新增、查看、编辑和删除 Conclusion
 - 按标题、问题、结论和原因进行关键词搜索
-- 查看、新增和版本化更新思考模型
+- 查看、新增、原地编辑和软删除思考模型
 - 后续通过 FengDock MCP 供 ChatGPT 查询、新增和更新 Conclusion
 
 ## MVP 页面
@@ -81,10 +81,11 @@ Available  POST   /api/decision-models
 Available  GET    /api/decision-models
 Available  GET    /api/decision-models/{id}
 Available  PATCH  /api/decision-models/{id}
+Available  DELETE /api/decision-models/{id}
 Planned    GET    /api/tags
 ```
 
-`PATCH` 接受部分字段，但必须同时提交客户端最后读取到的 `expectedUpdatedAt`。如果记录已被网页、MCP 或其他写入者修改，接口返回 `409 Conflict` 和最新的 `currentUpdatedAt`，避免静默覆盖。
+Conclusion 和思考模型的 `PATCH` 都必须提交客户端最后读取到的 `expectedUpdatedAt`。如果记录已被网页、MCP 或其他写入者修改，接口返回 `409 Conflict` 和最新的 `currentUpdatedAt`，避免静默覆盖。
 
 最终结论使用简短纯文本，保证在列表中一眼读完。详情保存并呈现 Markdown 原文；界面仅渲染 Markdown 中的公网 `https://` 图片 URL，Conclusion 不提供图片上传或本地图片托管。列表接口仍支持关键词和兼容元数据筛选。具体请求/响应契约由测试固定。
 
@@ -181,9 +182,9 @@ MCP 由 FengDock 的统一 OAuth 服务对外提供。读取工具：
 
 每个思考模型只定义 `name` 和简短的 `explanation` 两个业务字段。用户要求使用思考模型时，AI 应按 `list_decision_models` 的固定顺序把全部模型各过一遍，每个模型只做几句话的具体分析，再汇总为最终结论。
 
-Conclusion 的 `app/db.py` 提供可复用读写函数，FengDock 像加载 `vendor/fire/app/db.py` 一样加载它们。读取工具使用只读连接；写入工具使用普通事务连接，并通过 MCP annotations 明确标记副作用。MVP 暂不开放 `delete_conclusion`，删除仍在 UI 中由用户确认。
+Conclusion 的 `app/db.py` 提供可复用读写函数，FengDock 像加载 `vendor/fire/app/db.py` 一样加载它们。读取工具使用只读连接；写入工具使用普通事务连接，并通过 MCP annotations 明确标记副作用。MCP 不开放任何删除工具，Conclusion 和思考模型的删除都只能在网页明确确认。
 
-模型更新不会原地覆盖：`update_decision_model` 校验调用方最后读取到的 `expectedVersion`，再创建 `version + 1`；历史 Conclusion 继续引用旧版本。网页的“思考模型”管理页使用相同的版本化更新规则。完整工具契约和 AI 使用流程见 [docs/mcp-contract.md](docs/mcp-contract.md)。
+`update_decision_model` 校验调用方最后读取到的 `expectedUpdatedAt`，再直接更新当前定义。网页的“思考模型”管理页支持创建、原地编辑和软删除；软删除只从当前注册表隐藏模型，历史 Conclusion 的分析内容仍保留。完整工具契约和 AI 使用流程见 [docs/mcp-contract.md](docs/mcp-contract.md)。
 
 ## 暂时不做
 

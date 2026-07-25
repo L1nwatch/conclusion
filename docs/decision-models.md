@@ -55,6 +55,6 @@ Conclusion 的思考模型供 AI/MCP 在形成最终结论前从多个角度检�
 1. 新增稳定且不可复用的 `modelId`。
 2. 只提供名称和简短解释，最多几句话和一个小例子。
 3. 由 API 校验长度，并以 `version = 1` 保存。
-4. 修改已有字段时通过网页、HTTP API 或 MCP 创建新版本，不静默覆盖旧数据。
+4. 修改已有字段时通过网页、HTTP API 或 MCP 原地编辑，并使用 `expectedUpdatedAt` 防止并发静默覆盖。
 
-当前暂不继续增加内置模型。概率校准、决策矩阵、二阶效应和 pre-mortem 都有价值，但与已有模型部分重叠，等真实使用暴露缺口后再添加。注册表支持 `list / get / create / versioned update`，不引入原地覆盖、删除、自由拖拽节点、复杂分支图或自动 AI 结论。
+当前暂不继续增加内置模型。概率校准、决策矩阵、二阶效应和 pre-mortem 都有价值，但与已有模型部分重叠，等真实使用暴露缺口后再添加。网页注册表支持 `list / get / create / update / delete`；删除采用软删除以保留历史 Conclusion 分析。MCP 只支持 `list / get / create / update`，不暴露删除。

@@ -81,18 +81,30 @@ class DecisionModelList(BaseModel):
 
 
 class DecisionModelUpdate(BaseModel):
-    """Fields used to create the next immutable model version."""
+    """Fields used to edit a model definition in place."""
 
     model_config = ConfigDict(populate_by_name=True)
 
     name: str = Field(min_length=1, max_length=120)
     explanation: str = Field(min_length=1, max_length=800)
-    expected_version: int = Field(alias="expectedVersion", ge=1)
+    expected_updated_at: str = Field(alias="expectedUpdatedAt", min_length=1)
 
     @field_validator("name", "explanation", mode="before")
     @classmethod
     def strip_text(cls, value: object) -> object:
         return _strip_outer_whitespace(value)
+
+    @field_validator("expected_updated_at")
+    @classmethod
+    def validate_expected_updated_at(cls, value: str) -> str:
+        value = value.strip()
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError as error:
+            raise ValueError("expectedUpdatedAt must be an ISO 8601 timestamp") from error
+        if parsed.tzinfo is None:
+            raise ValueError("expectedUpdatedAt must include a timezone")
+        return value
 
 
 class DecisionModelRun(BaseModel):

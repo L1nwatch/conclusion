@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { deleteConclusion, updateDecisionModel } from './api'
+import { deleteConclusion, deleteDecisionModel, updateDecisionModel } from './api'
 
 describe('Conclusion API', () => {
   afterEach(() => {
@@ -16,10 +16,10 @@ describe('Conclusion API', () => {
     })
   })
 
-  it('updates a decision model with optimistic version checking', async () => {
+  it('updates a decision model in place with optimistic timestamp checking', async () => {
     const responseBody = {
       id: 'constraint-check',
-      version: 2,
+      version: 1,
       name: '关键约束检查',
       explanation: '检查真正限制结果的硬约束。',
       isBuiltin: false,
@@ -38,7 +38,7 @@ describe('Conclusion API', () => {
       updateDecisionModel('constraint-check', {
         name: '关键约束检查',
         explanation: '检查真正限制结果的硬约束。',
-        expectedVersion: 1,
+        expectedUpdatedAt: '2026-07-24T00:00:00Z',
       }),
     ).resolves.toEqual(responseBody)
     expect(fetchMock).toHaveBeenCalledWith('/api/decision-models/constraint-check', {
@@ -47,8 +47,18 @@ describe('Conclusion API', () => {
       body: JSON.stringify({
         name: '关键约束检查',
         explanation: '检查真正限制结果的硬约束。',
-        expectedVersion: 1,
+        expectedUpdatedAt: '2026-07-24T00:00:00Z',
       }),
+    })
+  })
+
+  it('deletes a decision model without trying to parse the empty 204 response', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(deleteDecisionModel('constraint-check')).resolves.toBeUndefined()
+    expect(fetchMock).toHaveBeenCalledWith('/api/decision-models/constraint-check', {
+      method: 'DELETE',
     })
   })
 })
