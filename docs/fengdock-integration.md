@@ -58,6 +58,6 @@ MCP 工具只放在 FengDock，不在 Conclusion 中启动第二个 MCP server�
 - 新增自定义决策模型
 - 原地更新决策模型
 
-Conclusion 写入时会校验 `decisionAnalysis` 引用的模型 ID、版本和统一的 `analysis` 键。每个模型的业务定义只有名称和简短解释；FengDock MCP 不重复维护模型常量，直接复用 Conclusion 数据库函数。`update_decision_model` 使用 `expectedUpdatedAt` 做并发保护并原地更新定义。
+Conclusion 写入时会校验 `decisionAnalysis` 引用的模型 ID 和统一的 `analysis` 键。每个模型只有一个当前定义，不存在版本；FengDock MCP 不重复维护模型常量，直接复用 Conclusion 数据库函数。`update_decision_model` 使用 `expectedUpdatedAt` 做并发保护并原地更新定义。
 
 FengDock 的读取工具以 SQLite `mode=ro` 打开数据库；新增和更新工具使用普通事务连接。所有工具继续复用现有 MCP OAuth、错误处理和 annotations，列表/搜索继续使用分页和结果上限。MCP 不提供 Conclusion 或思考模型删除工具；删除只在网页确认后执行。

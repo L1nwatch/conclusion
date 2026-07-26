@@ -69,7 +69,6 @@ class DecisionModelRecord(DecisionModelCreate):
 
     model_config = ConfigDict(populate_by_name=True)
 
-    version: int = Field(ge=1)
     is_builtin: bool = Field(alias="isBuiltin")
     created_at: datetime = Field(alias="createdAt")
     updated_at: datetime = Field(alias="updatedAt")
@@ -108,12 +107,11 @@ class DecisionModelUpdate(BaseModel):
 
 
 class DecisionModelRun(BaseModel):
-    """Answers produced with one specific version of a registered model."""
+    """Answers produced with a registered model."""
 
     model_config = ConfigDict(populate_by_name=True)
 
     model_id: str = Field(alias="modelId", min_length=2, max_length=64, pattern=MODEL_ID_PATTERN)
-    model_version: int = Field(default=1, alias="modelVersion", ge=1)
     answers: dict[str, str] = Field(min_length=1, max_length=20)
 
     @field_validator("answers", mode="before")
@@ -142,7 +140,7 @@ class DecisionModelRun(BaseModel):
 
 
 class DecisionAnalysis(BaseModel):
-    """Versioned, structured reasoning completed before the final conclusion."""
+    """Structured reasoning completed before the final conclusion."""
 
     version: Literal[1] = 1
     models: list[DecisionModelRun] = Field(default_factory=list, max_length=20)

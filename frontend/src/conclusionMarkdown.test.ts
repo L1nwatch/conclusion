@@ -18,7 +18,6 @@ const record: ConclusionRecord = {
     models: [
       {
         modelId: 'time-horizons',
-        modelVersion: 1,
         answers: { analysis: '十个月后，购买时点本身并不重要。' },
       },
     ],
@@ -29,7 +28,6 @@ const record: ConclusionRecord = {
 
 const definition: DecisionModelDefinition = {
   id: 'time-horizons',
-  version: 1,
   name: '时间尺度',
   explanation: '从多个时间尺度回看决定。',
   isBuiltin: true,

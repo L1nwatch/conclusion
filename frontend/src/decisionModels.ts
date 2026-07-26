@@ -7,7 +7,6 @@ export function emptyDecisionAnalysis(
     version: 1,
     models: definitions.map((definition) => ({
       modelId: definition.id,
-      modelVersion: definition.version,
       answers: { analysis: '' },
     })),
   }
@@ -34,8 +33,7 @@ export function hydrateDecisionAnalysis(
   const hydrated = emptyDecisionAnalysis(definitions)
   for (const saved of analysis.models) {
     const target = hydrated.models.find(
-      (model) =>
-        model.modelId === saved.modelId && model.modelVersion === saved.modelVersion,
+      (model) => model.modelId === saved.modelId,
     )
     if (target) Object.assign(target.answers, saved.answers)
   }

@@ -100,22 +100,19 @@ def create_app(
         tags=["decision-models"],
     )
     def get_decision_models(
-        include_history: bool = Query(default=False, alias="includeHistory"),
+        include_deleted: bool = Query(default=False, alias="includeDeleted"),
     ) -> dict[str, object]:
         with connect(database_path, read_only=True) as connection:
-            return list_decision_models(connection, include_history=include_history)
+            return list_decision_models(connection, include_deleted=include_deleted)
 
     @app.get(
         "/api/decision-models/{model_id}",
         response_model=DecisionModelRecord,
         tags=["decision-models"],
     )
-    def get_decision_model_by_id(
-        model_id: str,
-        version: int | None = Query(default=None, ge=1),
-    ) -> dict[str, object]:
+    def get_decision_model_by_id(model_id: str) -> dict[str, object]:
         with connect(database_path, read_only=True) as connection:
-            record = get_decision_model(connection, model_id, version)
+            record = get_decision_model(connection, model_id)
         if record is None:
             raise HTTPException(status_code=404, detail="Decision model not found")
         return record

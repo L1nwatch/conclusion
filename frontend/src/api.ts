@@ -49,10 +49,10 @@ export function getConclusion(id: number): Promise<ConclusionRecord> {
   return requestJson(`/api/conclusions/${id}`)
 }
 
-export function listDecisionModels(includeHistory = false): Promise<DecisionModelListResponse> {
+export function listDecisionModels(includeDeleted = false): Promise<DecisionModelListResponse> {
   return requestJson(
-    includeHistory
-      ? '/api/decision-models?includeHistory=true'
+    includeDeleted
+      ? '/api/decision-models?includeDeleted=true'
       : '/api/decision-models',
   )
 }

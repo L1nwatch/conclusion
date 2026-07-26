@@ -64,7 +64,7 @@ Conclusion 是一个个人决策知识库，用来保存“已经想清楚的最
 - 不行动分析：比较保持现状避免的成本和错失的价值
 - 可逆性判断：区分单向门与双向门，优先设计最小可逆试验
 
-每个模型只有名称和几句话的解释，不再拆成问卷；应用模型后只记录一段简析。“经验之谈”会先检索已有 Conclusion；没有先例时明确说明，不编造经验。简析以 `modelId + modelVersion + answers.analysis` 保存，并在详情页转换成 Markdown 展示。模型边界和扩展原则见 [docs/decision-models.md](docs/decision-models.md)。
+每个模型只有稳定 ID、名称和几句话的解释，不再拆成问卷，也没有版本概念；更新会直接替换当前定义。应用模型后只记录一段简析。“经验之谈”会先检索已有 Conclusion；没有先例时明确说明，不编造经验。简析以 `modelId + answers.analysis` 保存，并在详情页转换成 Markdown 展示。模型边界和扩展原则见 [docs/decision-models.md](docs/decision-models.md)。
 
 ## API
 

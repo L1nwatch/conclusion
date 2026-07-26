@@ -47,10 +47,10 @@ def test_list_and_get_builtin_decision_models(tmp_path: Path) -> None:
         "inaction-value",
         "reversibility",
     ]
-    assert all(item["version"] == 1 and item["isBuiltin"] for item in body["items"])
+    assert all(item["isBuiltin"] for item in body["items"])
     assert all(
         set(item) == {
-            "id", "version", "name", "explanation", "isBuiltin", "createdAt", "updatedAt"
+            "id", "name", "explanation", "isBuiltin", "createdAt", "updatedAt"
         }
         for item in body["items"]
     )
@@ -69,7 +69,6 @@ def test_create_custom_model_and_use_it_in_conclusion(tmp_path: Path) -> None:
                 "models": [
                     {
                         "modelId": "constraint-check",
-                        "modelVersion": 1,
                         "answers": {"analysis": "Stay within the weekly time budget."},
                     }
                 ],
@@ -81,7 +80,6 @@ def test_create_custom_model_and_use_it_in_conclusion(tmp_path: Path) -> None:
     assert created.status_code == 201
     assert created.json() == {
         **CUSTOM_MODEL,
-        "version": 1,
         "isBuiltin": False,
         "createdAt": created.json()["createdAt"],
         "updatedAt": created.json()["updatedAt"],
@@ -116,14 +114,6 @@ def test_update_decision_model_edits_current_definition_in_place(
             },
         )
         latest = client.get("/api/decision-models/constraint-check")
-        version_one = client.get(
-            "/api/decision-models/constraint-check",
-            params={"version": 1},
-        )
-        history = client.get(
-            "/api/decision-models",
-            params={"includeHistory": True},
-        )
         stale = client.patch(
             "/api/decision-models/constraint-check",
             json={
@@ -141,8 +131,7 @@ def test_update_decision_model_edits_current_definition_in_place(
                     "models": [
                         {
                             "modelId": "constraint-check",
-                            "modelVersion": 1,
-                            "answers": {"analysis": "旧版本仍然可以被引用。"},
+                            "answers": {"analysis": "更新后的模型可以直接被引用。"},
                         }
                     ],
                 },
@@ -150,30 +139,19 @@ def test_update_decision_model_edits_current_definition_in_place(
         )
 
     assert updated.status_code == 200
-    assert updated.json()["version"] == 1
     assert updated.json()["name"] == "关键约束检查"
     assert updated.json()["createdAt"] == created.json()["createdAt"]
     assert updated.json()["updatedAt"] != created.json()["updatedAt"]
     assert latest.json() == updated.json()
-    assert version_one.json()["name"] == "关键约束检查"
-    assert version_one.json()["version"] == 1
-    assert history.json()["count"] == 8
     assert stale.status_code == 409
     assert stale.json()["detail"]["currentUpdatedAt"] == updated.json()["updatedAt"]
     assert historical_conclusion.status_code == 201
 
     with connect(database_path, read_only=True) as connection:
-        versions = connection.execute(
-            """
-            SELECT version, name
-            FROM decision_models
-            WHERE id = 'constraint-check'
-            ORDER BY version
-            """
-        ).fetchall()
-    assert [(row["version"], row["name"]) for row in versions] == [
-        (1, "关键约束检查"),
-    ]
+        stored = connection.execute(
+            "SELECT name FROM decision_models WHERE id = 'constraint-check'"
+        ).fetchone()
+    assert stored["name"] == "关键约束检查"
 
 
 def test_delete_decision_model_hides_it_without_losing_history(tmp_path: Path) -> None:
@@ -190,7 +168,6 @@ def test_delete_decision_model_hides_it_without_losing_history(tmp_path: Path) -
                     "models": [
                         {
                             "modelId": "constraint-check",
-                            "modelVersion": 1,
                             "answers": {"analysis": "保留这段历史分析。"},
                         }
                     ],
@@ -200,9 +177,9 @@ def test_delete_decision_model_hides_it_without_losing_history(tmp_path: Path) -
         deleted = client.delete("/api/decision-models/constraint-check")
         listed = client.get("/api/decision-models")
         fetched = client.get("/api/decision-models/constraint-check")
-        history = client.get(
+        deleted_models = client.get(
             "/api/decision-models",
-            params={"includeHistory": True},
+            params={"includeDeleted": True},
         )
         existing_conclusion = client.get(f"/api/conclusions/{conclusion.json()['id']}")
         repeated = client.delete("/api/decision-models/constraint-check")
@@ -210,7 +187,9 @@ def test_delete_decision_model_hides_it_without_losing_history(tmp_path: Path) -
     assert deleted.status_code == 204
     assert "constraint-check" not in {item["id"] for item in listed.json()["items"]}
     assert fetched.status_code == 404
-    assert "constraint-check" in {item["id"] for item in history.json()["items"]}
+    assert "constraint-check" in {
+        item["id"] for item in deleted_models.json()["items"]
+    }
     assert existing_conclusion.json()["decisionAnalysis"]["models"][0]["answers"] == {
         "analysis": "保留这段历史分析。"
     }
@@ -268,17 +247,10 @@ def test_create_decision_model_validates_definition(
     [
         {
             "modelId": "missing-model",
-            "modelVersion": 1,
             "answers": {"question": "Answer"},
         },
         {
             "modelId": "time-horizons",
-            "modelVersion": 2,
-            "answers": {"analysis": "Answer"},
-        },
-        {
-            "modelId": "time-horizons",
-            "modelVersion": 1,
             "answers": {"unknownPrompt": "Answer"},
         },
     ],
@@ -333,7 +305,6 @@ def test_builtin_migration_keeps_legacy_definition_and_prompt_keys_readable(
             "models": [
                 {
                     "modelId": "time-horizons",
-                    "modelVersion": 1,
                     "answers": {"tenHours": "Legacy answer remains valid."},
                 }
             ],

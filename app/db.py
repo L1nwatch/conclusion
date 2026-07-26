@@ -197,8 +197,7 @@ def init_db(connection: sqlite3.Connection) -> None:
         );
 
         CREATE TABLE IF NOT EXISTS decision_models (
-            id TEXT NOT NULL,
-            version INTEGER NOT NULL CHECK (version >= 1),
+            id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
             short_name TEXT NOT NULL,
             description TEXT NOT NULL,
@@ -208,8 +207,7 @@ def init_db(connection: sqlite3.Connection) -> None:
             is_builtin INTEGER NOT NULL CHECK (is_builtin IN (0, 1)),
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
-            deleted_at TEXT,
-            PRIMARY KEY (id, version)
+            deleted_at TEXT
         );
         """
     )
@@ -221,20 +219,25 @@ def init_db(connection: sqlite3.Connection) -> None:
         connection.execute(
             "ALTER TABLE conclusions ADD COLUMN conditions TEXT NOT NULL DEFAULT ''"
         )
-    _migrate_decision_model_versions(connection)
     _migrate_decision_model_soft_delete(connection)
+    _migrate_decision_models_to_single_row(connection)
+    _migrate_decision_analysis_model_versions(connection)
     _seed_builtin_decision_models(connection)
     connection.commit()
 
 
-def _migrate_decision_model_versions(connection: sqlite3.Connection) -> None:
-    """Replace the legacy one-row-per-ID registry with immutable versions."""
+def _migrate_decision_models_to_single_row(connection: sqlite3.Connection) -> None:
+    """Collapse a versioned registry to the latest definition for each stable ID."""
+    columns = {
+        row["name"]
+        for row in connection.execute("PRAGMA table_info(decision_models)").fetchall()
+    }
     primary_key = {
         row["name"]: int(row["pk"])
         for row in connection.execute("PRAGMA table_info(decision_models)").fetchall()
         if int(row["pk"]) > 0
     }
-    if primary_key == {"id": 1, "version": 2}:
+    if "version" not in columns and primary_key == {"id": 1}:
         return
 
     connection.executescript(
@@ -242,8 +245,7 @@ def _migrate_decision_model_versions(connection: sqlite3.Connection) -> None:
         ALTER TABLE decision_models RENAME TO decision_models_legacy;
 
         CREATE TABLE decision_models (
-            id TEXT NOT NULL,
-            version INTEGER NOT NULL CHECK (version >= 1),
+            id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
             short_name TEXT NOT NULL,
             description TEXT NOT NULL,
@@ -253,18 +255,24 @@ def _migrate_decision_model_versions(connection: sqlite3.Connection) -> None:
             is_builtin INTEGER NOT NULL CHECK (is_builtin IN (0, 1)),
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
-            deleted_at TEXT,
-            PRIMARY KEY (id, version)
+            deleted_at TEXT
         );
 
         INSERT INTO decision_models (
-            id, version, name, short_name, description, prompts_json,
-            source_name, source_url, is_builtin, created_at, updated_at
+            id, name, short_name, description, prompts_json,
+            source_name, source_url, is_builtin, created_at, updated_at, deleted_at
         )
         SELECT
-            id, version, name, short_name, description, prompts_json,
-            source_name, source_url, is_builtin, created_at, updated_at
-        FROM decision_models_legacy;
+            model.id, model.name, model.short_name, model.description, model.prompts_json,
+            model.source_name, model.source_url, model.is_builtin,
+            model.created_at, model.updated_at, model.deleted_at
+        FROM decision_models_legacy AS model
+        JOIN (
+            SELECT id, max(version) AS latest_version
+            FROM decision_models_legacy
+            GROUP BY id
+        ) AS latest
+          ON latest.id = model.id AND latest.latest_version = model.version;
 
         DROP TABLE decision_models_legacy;
         """
@@ -281,17 +289,40 @@ def _migrate_decision_model_soft_delete(connection: sqlite3.Connection) -> None:
         connection.execute("ALTER TABLE decision_models ADD COLUMN deleted_at TEXT")
 
 
+def _migrate_decision_analysis_model_versions(connection: sqlite3.Connection) -> None:
+    """Remove obsolete per-model version keys from saved analysis JSON."""
+    rows = connection.execute(
+        "SELECT conclusion_id, analysis_json FROM decision_analyses"
+    ).fetchall()
+    for row in rows:
+        analysis = json.loads(row["analysis_json"])
+        changed = False
+        for run in analysis.get("models", []):
+            for key in ("model_version", "modelVersion"):
+                if key in run:
+                    run.pop(key)
+                    changed = True
+        if changed:
+            connection.execute(
+                "UPDATE decision_analyses SET analysis_json = ? WHERE conclusion_id = ?",
+                (
+                    json.dumps(analysis, ensure_ascii=False, separators=(",", ":")),
+                    row["conclusion_id"],
+                ),
+            )
+
+
 def _seed_builtin_decision_models(connection: sqlite3.Connection) -> None:
-    """Register version-one built-ins when their IDs have never existed."""
+    """Register built-ins when their IDs have never existed."""
     timestamp = utc_timestamp()
     for model in BUILTIN_DECISION_MODELS:
         connection.execute(
             """
             INSERT INTO decision_models (
-                id, version, name, short_name, description, prompts_json,
+                id, name, short_name, description, prompts_json,
                 source_name, source_url, is_builtin, created_at, updated_at
-            ) VALUES (?, 1, ?, ?, ?, ?, ?, ?, 1, ?, ?)
-            ON CONFLICT(id, version) DO NOTHING
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+            ON CONFLICT(id) DO NOTHING
             """,
             (
                 model["id"],
@@ -391,7 +422,7 @@ def _replace_decision_analysis(
     conclusion_id: int,
     analysis: Mapping[str, Any],
 ) -> None:
-    """Replace one Conclusion's versioned decision analysis."""
+    """Replace one Conclusion's structured decision analysis."""
     _validate_decision_analysis(connection, analysis)
     connection.execute(
         "DELETE FROM decision_analyses WHERE conclusion_id = ?",
@@ -416,22 +447,19 @@ def _validate_decision_analysis(
     connection: sqlite3.Connection,
     analysis: Mapping[str, Any],
 ) -> None:
-    """Ensure every analysis answer matches a registered immutable model version."""
+    """Ensure every analysis answer matches a registered model."""
     for run in analysis.get("models", []):
         model_id = run["model_id"]
-        model_version = run.get("model_version", 1)
         row = connection.execute(
             """
             SELECT prompts_json
             FROM decision_models
-            WHERE id = ? AND version = ?
+            WHERE id = ?
             """,
-            (model_id, model_version),
+            (model_id,),
         ).fetchone()
         if row is None:
-            raise UnknownDecisionModelError(
-                f"Unknown decision model version: {model_id}@{model_version}"
-            )
+            raise UnknownDecisionModelError(f"Unknown decision model: {model_id}")
         # ``analysis`` is the single current answer field. Stored prompt keys
         # remain accepted so old Conclusions can still be edited and saved.
         prompt_keys = {"analysis"} | {
@@ -459,27 +487,15 @@ def _serialize_decision_model(row: sqlite3.Row) -> dict[str, Any]:
 def list_decision_models(
     connection: sqlite3.Connection,
     *,
-    include_history: bool = False,
+    include_deleted: bool = False,
 ) -> dict[str, Any]:
-    """Return active models, optionally including history and soft-deleted rows."""
-    source_sql = (
-        "SELECT model.* FROM decision_models AS model"
-        if include_history
-        else """
-        SELECT model.*
-        FROM decision_models AS model
-        JOIN (
-            SELECT id, max(version) AS version
-            FROM decision_models
-            WHERE deleted_at IS NULL
-            GROUP BY id
-        ) AS latest
-          ON latest.id = model.id AND latest.version = model.version
-        """
-    )
+    """Return the single latest definition for each model."""
+    where_sql = "" if include_deleted else "WHERE model.deleted_at IS NULL"
     rows = connection.execute(
         f"""
-        {source_sql}
+        SELECT model.*
+        FROM decision_models AS model
+        {where_sql}
         ORDER BY CASE model.id
             WHEN 'precedent-review' THEN 0
             WHEN 'munger-checklist' THEN 1
@@ -489,7 +505,7 @@ def list_decision_models(
             WHEN 'inaction-value' THEN 5
             WHEN 'reversibility' THEN 6
             ELSE 100
-        END, model.created_at, model.id, model.version
+        END, model.created_at, model.id
         """
     ).fetchall()
     return {"count": len(rows), "items": [_serialize_decision_model(row) for row in rows]}
@@ -498,25 +514,12 @@ def list_decision_models(
 def get_decision_model(
     connection: sqlite3.Connection,
     model_id: str,
-    version: int | None = None,
 ) -> dict[str, Any] | None:
-    """Return one model version, defaulting to the latest active definition."""
-    if version is None:
-        row = connection.execute(
-            """
-            SELECT *
-            FROM decision_models
-            WHERE id = ? AND deleted_at IS NULL
-            ORDER BY version DESC
-            LIMIT 1
-            """,
-            (model_id,),
-        ).fetchone()
-    else:
-        row = connection.execute(
-            "SELECT * FROM decision_models WHERE id = ? AND version = ?",
-            (model_id, version),
-        ).fetchone()
+    """Return the active definition for one model."""
+    row = connection.execute(
+        "SELECT * FROM decision_models WHERE id = ? AND deleted_at IS NULL",
+        (model_id,),
+    ).fetchone()
     return _serialize_decision_model(row) if row is not None else None
 
 
@@ -524,15 +527,15 @@ def create_decision_model(
     connection: sqlite3.Connection,
     values: Mapping[str, Any],
 ) -> dict[str, Any]:
-    """Register one version-one custom decision model."""
+    """Register one custom decision model."""
     timestamp = utc_timestamp()
     try:
         connection.execute(
             """
             INSERT INTO decision_models (
-                id, version, name, short_name, description, prompts_json,
+                id, name, short_name, description, prompts_json,
                 source_name, source_url, is_builtin, created_at, updated_at
-            ) VALUES (?, 1, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
             """,
             (
                 values["id"],
@@ -573,7 +576,7 @@ def update_decision_model(
         """
         UPDATE decision_models
         SET name = ?, short_name = ?, description = ?, updated_at = ?
-        WHERE id = ? AND version = ? AND updated_at = ? AND deleted_at IS NULL
+        WHERE id = ? AND updated_at = ? AND deleted_at IS NULL
         """,
         (
             values["name"],
@@ -581,7 +584,6 @@ def update_decision_model(
             values["explanation"],
             utc_timestamp(),
             model_id,
-            current["version"],
             expected_updated_at,
         ),
     )
@@ -590,14 +592,14 @@ def update_decision_model(
         if latest is None:
             return None
         raise DecisionModelUpdateConflictError(latest["updated_at"])
-    return get_decision_model(connection, model_id, current["version"])
+    return get_decision_model(connection, model_id)
 
 
 def delete_decision_model(
     connection: sqlite3.Connection,
     model_id: str,
 ) -> bool:
-    """Soft-delete all versions of one model so historical references remain readable."""
+    """Soft-delete one model while keeping its latest definition readable internally."""
     timestamp = utc_timestamp()
     cursor = connection.execute(
         """

@@ -27,12 +27,10 @@ VALID_PAYLOAD = {
         "models": [
             {
                 "modelId": "time-horizons",
-                "modelVersion": 1,
                 "answers": {"analysis": "The urge will fade and the timing will not matter."},
             },
             {
                 "modelId": "munger-checklist",
-                "modelVersion": 1,
                 "answers": {"analysis": "The sale creates urgency but not enough value."},
             },
         ],
@@ -119,6 +117,33 @@ def test_create_conclusion_defaults_optional_content_and_tags(tmp_path: Path) ->
     assert response.json()["conditions"] == ""
     assert response.json()["tags"] == []
     assert response.json()["decisionAnalysis"] == {"version": 1, "models": []}
+
+
+def test_create_conclusion_discards_legacy_model_version(tmp_path: Path) -> None:
+    payload = {
+        **VALID_PAYLOAD,
+        "decisionAnalysis": {
+            "version": 1,
+            "models": [
+                {
+                    "modelId": "time-horizons",
+                    "modelVersion": 7,
+                    "answers": {"analysis": "Keep the reasoning, not the model version."},
+                }
+            ],
+        },
+    }
+
+    with TestClient(create_app(tmp_path / "conclusion.sqlite3")) as client:
+        response = client.post("/api/conclusions", json=payload)
+
+    assert response.status_code == 201
+    assert response.json()["decisionAnalysis"]["models"] == [
+        {
+            "modelId": "time-horizons",
+            "answers": {"analysis": "Keep the reasoning, not the model version."},
+        }
+    ]
 
 
 @pytest.mark.parametrize(

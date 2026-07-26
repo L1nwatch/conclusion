@@ -15,10 +15,7 @@ const visibleModels = computed(() =>
   props.analysis.models
     .map((run) => ({
       run,
-      definition: props.definitions.find(
-        (definition) =>
-          definition.id === run.modelId && definition.version === run.modelVersion,
-      ),
+      definition: props.definitions.find((definition) => definition.id === run.modelId),
     }))
     .filter((item) => item.definition),
 )

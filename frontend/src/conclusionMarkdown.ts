@@ -23,10 +23,7 @@ export function conclusionMarkdown(
     ).trim()
     if (!content) return []
     const name =
-      definitions.find(
-        (definition) =>
-          definition.id === run.modelId && definition.version === run.modelVersion,
-      )?.name ?? run.modelId
+      definitions.find((definition) => definition.id === run.modelId)?.name ?? run.modelId
     return [`### ${name}\n\n${content}`]
   })
   if (analyses.length) sections.push(`## 思考过程\n\n${analyses.join('\n\n')}`)

@@ -145,7 +145,7 @@ onMounted(load)
       <div class="section-heading">
         <div>
           <h2 id="models-title">模型注册表</h2>
-          <p>AI 会按以下顺序逐个应用当前版本</p>
+          <p>AI 会按以下顺序逐个应用当前模型</p>
         </div>
         <button class="text-action" type="button" :disabled="loading" @click="load">
           {{ loading ? '读取中…' : '刷新' }}
@@ -170,7 +170,6 @@ onMounted(load)
               <h3>{{ model.name }}</h3>
               <el-tag v-if="model.isBuiltin" effect="plain">内置</el-tag>
               <el-tag v-else type="success" effect="plain">自定义</el-tag>
-              <span>v{{ model.version }}</span>
             </div>
             <code>{{ model.id }}</code>
             <p>{{ model.explanation }}</p>

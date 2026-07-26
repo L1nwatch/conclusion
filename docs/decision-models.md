@@ -4,7 +4,7 @@ Conclusion 的思考模型供 AI/MCP 在形成最终结论前从多个角度检�
 
 ## 设计原则
 
-- 模型定义只有 `name` 和 `explanation` 两个业务字段；稳定 ID 和版本只是内部引用信息。
+- 模型定义只有稳定 ID、`name` 和 `explanation`，每个 ID 永远只有一个当前定义。
 - 用户要求使用思考模型时，AI 默认把注册表中的全部模型按顺序各过一遍，而不是自行挑选。
 - 每个模型只做一小段具体分析，保存在统一的 `answers.analysis`；最终核心理由仍可使用 Markdown 附参考链接和公网图片。
 - 旧版多问题回答继续兼容和可读，但新记录不再生成问卷。
@@ -54,7 +54,7 @@ Conclusion 的思考模型供 AI/MCP 在形成最终结论前从多个角度检�
 
 1. 新增稳定且不可复用的 `modelId`。
 2. 只提供名称和简短解释，最多几句话和一个小例子。
-3. 由 API 校验长度，并以 `version = 1` 保存。
+3. 由 API 校验长度，并以稳定 ID 保存；后续更新直接替换当前定义。
 4. 修改已有字段时通过网页、HTTP API 或 MCP 原地编辑，并使用 `expectedUpdatedAt` 防止并发静默覆盖。
 
 当前暂不继续增加内置模型。概率校准、决策矩阵、二阶效应和 pre-mortem 都有价值，但与已有模型部分重叠，等真实使用暴露缺口后再添加。网页注册表支持 `list / get / create / update / delete`；删除采用软删除以保留历史 Conclusion 分析。MCP 只支持 `list / get / create / update`，不暴露删除。

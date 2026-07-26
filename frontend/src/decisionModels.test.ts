@@ -8,7 +8,6 @@ import type { DecisionModelDefinition } from './types'
 
 const definition: DecisionModelDefinition = {
   id: 'constraint-check',
-  version: 1,
   name: '约束检查',
   explanation: '找出决定必须满足的硬约束。',
   isBuiltin: false,
@@ -23,7 +22,6 @@ describe('dynamic decision model analysis', () => {
       models: [
         {
           modelId: 'constraint-check',
-          modelVersion: 1,
           answers: { analysis: '' },
         },
       ],
@@ -37,7 +35,6 @@ describe('dynamic decision model analysis', () => {
         models: [
           {
             modelId: 'constraint-check',
-            modelVersion: 1,
             answers: { analysis: '不能超出每周时间预算' },
           },
         ],
@@ -53,7 +50,6 @@ describe('dynamic decision model analysis', () => {
       models: [
         {
           modelId: 'constraint-check',
-          modelVersion: 1,
           answers: { analysis: '不能超出每周时间预算' },
         },
       ],

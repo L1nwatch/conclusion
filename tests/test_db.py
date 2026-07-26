@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from contextlib import closing
 from pathlib import Path
@@ -145,54 +146,9 @@ def test_init_db_migrates_existing_conclusions_with_default_conditions(tmp_path:
     assert migrated["conditions"] == ""
 
 
-def test_init_db_migrates_legacy_decision_models_to_versioned_primary_key(
+def test_init_db_collapses_versioned_decision_models_to_latest_row(
     tmp_path: Path,
 ) -> None:
-    database_path = tmp_path / "legacy-models.sqlite3"
-    with closing(sqlite3.connect(database_path)) as connection:
-        connection.execute(
-            """
-            CREATE TABLE decision_models (
-                id TEXT PRIMARY KEY,
-                version INTEGER NOT NULL CHECK (version = 1),
-                name TEXT NOT NULL,
-                short_name TEXT NOT NULL,
-                description TEXT NOT NULL,
-                prompts_json TEXT NOT NULL,
-                source_name TEXT NOT NULL DEFAULT '',
-                source_url TEXT NOT NULL DEFAULT '',
-                is_builtin INTEGER NOT NULL CHECK (is_builtin IN (0, 1)),
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            )
-            """
-        )
-        connection.execute(
-            """
-            INSERT INTO decision_models VALUES (
-                'legacy-model', 1, '旧模型', '旧模型', '保留这段说明。', '[]',
-                '', '', 0, '2026-07-01T00:00:00Z', '2026-07-01T00:00:00Z'
-            )
-            """
-        )
-        connection.commit()
-
-    with connect(database_path) as connection:
-        init_db(connection)
-        primary_key = {
-            row["name"]: row["pk"]
-            for row in connection.execute("PRAGMA table_info(decision_models)").fetchall()
-            if row["pk"]
-        }
-        legacy = connection.execute(
-            "SELECT name, description FROM decision_models WHERE id = 'legacy-model'"
-        ).fetchone()
-
-    assert primary_key == {"id": 1, "version": 2}
-    assert dict(legacy) == {"name": "旧模型", "description": "保留这段说明。"}
-
-
-def test_init_db_adds_soft_delete_to_existing_versioned_models(tmp_path: Path) -> None:
     database_path = tmp_path / "versioned-models.sqlite3"
     with closing(sqlite3.connect(database_path)) as connection:
         connection.execute(
@@ -206,23 +162,101 @@ def test_init_db_adds_soft_delete_to_existing_versioned_models(tmp_path: Path) -
                 prompts_json TEXT NOT NULL,
                 source_name TEXT NOT NULL DEFAULT '',
                 source_url TEXT NOT NULL DEFAULT '',
-                is_builtin INTEGER NOT NULL,
+                is_builtin INTEGER NOT NULL CHECK (is_builtin IN (0, 1)),
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 PRIMARY KEY (id, version)
             )
             """
         )
+        connection.executemany(
+            """
+            INSERT INTO decision_models VALUES (?, ?, ?, ?, ?, '[]', '', '', 0, ?, ?)
+            """,
+            [
+                (
+                    "legacy-model",
+                    1,
+                    "旧模型",
+                    "旧模型",
+                    "旧版说明。",
+                    "2026-07-01T00:00:00Z",
+                    "2026-07-01T00:00:00Z",
+                ),
+                (
+                    "legacy-model",
+                    2,
+                    "最新模型",
+                    "最新模型",
+                    "只保留最新说明。",
+                    "2026-07-01T00:00:00Z",
+                    "2026-07-02T00:00:00Z",
+                ),
+            ],
+        )
         connection.commit()
 
     with connect(database_path) as connection:
         init_db(connection)
+        primary_key = {
+            row["name"]: row["pk"]
+            for row in connection.execute("PRAGMA table_info(decision_models)").fetchall()
+            if row["pk"]
+        }
+        legacy = connection.execute(
+            "SELECT name, description FROM decision_models WHERE id = 'legacy-model'"
+        ).fetchone()
         columns = {
             row["name"]
             for row in connection.execute("PRAGMA table_info(decision_models)").fetchall()
         }
 
+    assert primary_key == {"id": 1}
+    assert "version" not in columns
     assert "deleted_at" in columns
+    assert dict(legacy) == {"name": "最新模型", "description": "只保留最新说明。"}
+
+
+def test_init_db_removes_model_versions_from_saved_analyses(tmp_path: Path) -> None:
+    database_path = tmp_path / "analysis-versions.sqlite3"
+    with connect(database_path) as connection:
+        init_db(connection)
+        cursor = connection.execute(INSERT_CONCLUSION_SQL, VALID_CONCLUSION)
+        connection.execute(
+            """
+            INSERT INTO decision_analyses (conclusion_id, schema_version, analysis_json)
+            VALUES (?, 1, ?)
+            """,
+            (
+                cursor.lastrowid,
+                json.dumps(
+                    {
+                        "version": 1,
+                        "models": [
+                            {
+                                "model_id": "time-horizons",
+                                "model_version": 2,
+                                "answers": {"analysis": "保留分析内容。"},
+                            }
+                        ],
+                    },
+                    ensure_ascii=False,
+                ),
+            ),
+        )
+        init_db(connection)
+        stored = connection.execute(
+            "SELECT analysis_json FROM decision_analyses WHERE conclusion_id = ?",
+            (cursor.lastrowid,),
+        ).fetchone()
+
+    analysis = json.loads(stored["analysis_json"])
+    assert analysis["models"] == [
+        {
+            "model_id": "time-horizons",
+            "answers": {"analysis": "保留分析内容。"},
+        }
+    ]
 
 
 @pytest.mark.parametrize(

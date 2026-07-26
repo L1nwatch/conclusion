@@ -69,7 +69,6 @@ def test_patch_conclusion_updates_decision_analysis(tmp_path: Path) -> None:
             "models": [
                 {
                     "modelId": "scenario-range",
-                    "modelVersion": 1,
                     "answers": {
                         "analysis": "The upside is modest and the downside wastes money."
                     },

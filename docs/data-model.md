@@ -37,7 +37,7 @@ API 输出可将时间字段序列化为 `createdAt` 和 `updatedAt`，数据库
 | `schema_version` | `INTEGER` | 当前固定为 `1` |
 | `analysis_json` | `TEXT` | 经过 API schema 校验的结构化模型回答 |
 
-JSON 顶层包含 `version` 和 `models`。每次模型运行保存稳定的 `modelId`、`modelVersion` 和非空 `answers`；写入时校验模型版本及问题键确实存在。同一分析中不允许重复模型。空分析不写入该表，API 统一返回 `{ "version": 1, "models": [] }`。
+JSON 顶层包含内部 schema 标记 `version` 和 `models`。每次模型运行只保存稳定的 `modelId` 和非空 `answers`；写入时校验模型及问题键确实存在。同一分析中不允许重复模型。空分析不写入该表，API 统一返回 `{ "version": 1, "models": [] }`。旧数据中的 `modelVersion` 会在启动迁移时移除。
 
 ## `decision_models`
 
@@ -45,8 +45,7 @@ JSON 顶层包含 `version` 和 `models`。每次模型运行保存稳定的 `mo
 
 | 字段 | SQLite 类型 | 约束/说明 |
 | --- | --- | --- |
-| `id` | `TEXT` | 稳定 slug，与 `version` 组成复合主键，创建后不复用 |
-| `version` | `INTEGER` | 历史兼容版本，与 `id` 组成复合主键；新建模型为 `1` |
+| `id` | `TEXT` | 主键；稳定 slug，创建后不复用 |
 | `name` | `TEXT` | 展示名称 |
 | `short_name` | `TEXT` | 紧凑英文或符号标识 |
 | `description` | `TEXT` | 模型用途说明 |
@@ -58,7 +57,7 @@ JSON 顶层包含 `version` 和 `models`。每次模型运行保存稳定的 `mo
 | `updated_at` | `TEXT` | UTC ISO 8601；每次原地编辑时更新 |
 | `deleted_at` | `TEXT` | 可空；网页删除时写入 UTC 时间并从当前注册表隐藏 |
 
-应用初始化时以 `INSERT ... ON CONFLICT DO NOTHING` 注册七个内置模型，不覆盖数据库中已有定义或删除标记。列表和详情默认只返回未删除模型；HTTP/MCP 更新要求 `expectedUpdatedAt` 并原地修改当前定义。网页删除使用软删除，`includeHistory=true` 仍可读取历史定义，以便已保存的 Conclusion 继续通过 `modelId + modelVersion` 显示分析。
+应用初始化时以 `INSERT ... ON CONFLICT DO NOTHING` 注册七个内置模型，不覆盖数据库中已有定义或删除标记。旧版数据库若同一 ID 存在多行，启动迁移只保留版本号最高的最新定义，然后彻底移除模型版本列。列表和详情默认只返回未删除模型；HTTP/MCP 更新要求 `expectedUpdatedAt` 并原地修改唯一当前定义。网页删除使用软删除，`includeDeleted=true` 可读取被删除定义，以便已保存的 Conclusion 继续通过 `modelId` 显示分析。
 
 ## Markdown 和图片
 

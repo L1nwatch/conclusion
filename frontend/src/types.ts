@@ -2,7 +2,6 @@ export type Confidence = 'High' | 'Medium' | 'Low'
 
 export interface DecisionModelDefinition {
   id: string
-  version: number
   name: string
   explanation: string
   isBuiltin: boolean
@@ -29,7 +28,6 @@ export interface DecisionModelUpdateInput {
 
 export interface DecisionModelRun {
   modelId: string
-  modelVersion: number
   answers: Record<string, string>
 }
 

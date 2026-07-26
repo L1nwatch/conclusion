@@ -129,12 +129,6 @@ textarea {
   font-weight: 500;
 }
 
-.model-card-title > span {
-  color: #829087;
-  font-size: 0.75rem;
-  font-weight: 700;
-}
-
 .model-card-body code {
   display: inline-block;
   margin-top: 7px;
