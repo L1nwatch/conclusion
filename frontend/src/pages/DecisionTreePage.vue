@@ -10,6 +10,9 @@ import {
 } from '../decisionTree'
 import type { DecisionNode, DecisionRecord, Point } from '../decisionTree'
 
+const AUTOSAVE_IDLE_MS = 8000
+const AUTOSAVE_MAX_WAIT_MS = 30000
+
 const route = useRoute()
 const decision = shallowRef<DecisionRecord | null>(null)
 const draft = shallowRef<DecisionNode[]>([])
@@ -28,6 +31,8 @@ const saveError = ref('')
 const conflict = ref(false)
 let saveTimer: ReturnType<typeof setTimeout> | undefined
 let pendingSave: Promise<void> | undefined
+let queuedSince: number | undefined
+let lastChangeAt = 0
 const tree = computed(() => indexTree(draft.value))
 const details = computed(() => tree.value.byId.get(detailsId.value))
 const blank = computed(() => draft.value.some(node => !node.text.trim()))
@@ -65,6 +70,16 @@ function unpack(record: DecisionRecord): DecisionNode[] {
   return record.nodes.map(({ decisionId: _id, createdAt: _created, updatedAt: _updated, ...node }) => node)
 }
 
+function matchesSavedNodes(nodes: DecisionNode[], saved: DecisionRecord['nodes']): boolean {
+  return nodes.length === saved.length && nodes.every((node, index) => {
+    const previous = saved[index]!
+    return node.id === previous.id && node.parentId === previous.parentId &&
+      node.text.trim() === previous.text && (node.description?.trim() ?? null) === previous.description &&
+      node.type === previous.type && node.order === previous.order && node.collapsed === previous.collapsed &&
+      node.positionX === previous.positionX && node.positionY === previous.positionY
+  })
+}
+
 async function load() {
   clearTimeout(saveTimer)
   loading.value = true
@@ -78,6 +93,7 @@ async function load() {
     editing.value = undefined
     revision.value = 0
     savedRevision.value = 0
+    queuedSince = undefined
     saveError.value = ''
     conflict.value = false
   } catch (reason) {
@@ -89,9 +105,9 @@ async function load() {
 
 function scheduleSave() {
   clearTimeout(saveTimer)
-  if (dirty.value && !blank.value && !saving.value && !conflict.value) {
-    saveTimer = setTimeout(() => void save(), 650)
-  }
+  if (queuedSince === undefined || !dirty.value || blank.value || saving.value || conflict.value) return
+  const dueAt = Math.min(lastChangeAt + AUTOSAVE_IDLE_MS, queuedSince + AUTOSAVE_MAX_WAIT_MS)
+  saveTimer = setTimeout(() => void save(), Math.max(0, dueAt - performance.now()))
 }
 
 function save(): Promise<void> | undefined {
@@ -101,6 +117,12 @@ function save(): Promise<void> | undefined {
   if (!record || blank.value || !dirty.value || conflict.value) return
   const snapshot = draft.value
   const submitted = revision.value
+  queuedSince = undefined
+  if (matchesSavedNodes(snapshot, record.nodes)) {
+    savedRevision.value = submitted
+    saveError.value = ''
+    return
+  }
   saving.value = true
   saveError.value = ''
   pendingSave = saveDecisionTree(record.id, record.version, snapshot).then(updated => {
@@ -154,6 +176,8 @@ onUnmounted(() => {
 function change(nodes: DecisionNode[]) {
   draft.value = nodes
   revision.value++
+  lastChangeAt = performance.now()
+  queuedSince ??= lastChangeAt
   scheduleSave()
 }
 
