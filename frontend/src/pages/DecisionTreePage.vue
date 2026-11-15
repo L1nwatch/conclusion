@@ -28,7 +28,8 @@ const loading = ref(true)
 const saving = ref(false)
 const loadError = ref('')
 const saveError = ref('')
-const conflict = ref(false)
+const conflict = ref<{ remoteVersion?: number }>()
+const resolvingConflict = ref(false)
 let saveTimer: ReturnType<typeof setTimeout> | undefined
 let pendingSave: Promise<void> | undefined
 let queuedSince: number | undefined
@@ -95,7 +96,7 @@ async function load() {
     savedRevision.value = 0
     queuedSince = undefined
     saveError.value = ''
-    conflict.value = false
+    conflict.value = undefined
   } catch (reason) {
     loadError.value = (reason as Error).message
   } finally {
@@ -115,11 +116,17 @@ function save(): Promise<void> | undefined {
   if (pendingSave) return pendingSave
   const record = decision.value
   if (!record || blank.value || !dirty.value || conflict.value) return
+  return saveAgainst(record)
+}
+
+function saveAgainst(record: DecisionRecord): Promise<void> | undefined {
   const snapshot = draft.value
   const submitted = revision.value
   queuedSince = undefined
   if (matchesSavedNodes(snapshot, record.nodes)) {
+    decision.value = record
     savedRevision.value = submitted
+    conflict.value = undefined
     saveError.value = ''
     return
   }
@@ -128,9 +135,14 @@ function save(): Promise<void> | undefined {
   pendingSave = saveDecisionTree(record.id, record.version, snapshot).then(updated => {
     decision.value = updated
     savedRevision.value = submitted
+    conflict.value = undefined
   }).catch((reason: Error) => {
+    if (reason instanceof ApiError && reason.status === 409) {
+      const version = (reason.body as { detail?: { currentVersion?: unknown } } | null)?.detail?.currentVersion
+      conflict.value = { remoteVersion: typeof version === 'number' ? version : undefined }
+      return
+    }
     saveError.value = reason.message
-    conflict.value = reason instanceof ApiError && reason.status === 409
   }).finally(() => {
     pendingSave = undefined
     saving.value = false
@@ -140,6 +152,7 @@ function save(): Promise<void> | undefined {
 }
 
 async function leave() {
+  if (resolvingConflict.value) return false
   if (editing.value) finishEdit(editing.value.id, 'blur')
   await pendingSave
   while (dirty.value && !saveError.value) {
@@ -153,6 +166,65 @@ async function leave() {
 function reload() {
   if (saving.value) return
   if (!dirty.value || window.confirm('重新加载会放弃本页尚未保存的更改。继续？')) void load()
+}
+
+async function applyRemote() {
+  if (saving.value || resolvingConflict.value) return
+  resolvingConflict.value = true
+  try {
+    await ElMessageBox.confirm('应用远端会放弃本页未保存的编辑。', '应用远端版本', {
+      confirmButtonText: '应用远端', cancelButtonText: '取消', type: 'warning',
+    })
+    await load()
+  } catch {
+    // Closing the confirmation leaves the local draft available.
+  } finally {
+    resolvingConflict.value = false
+  }
+}
+
+async function applyLocal() {
+  const record = decision.value
+  if (!record || !conflict.value || saving.value || resolvingConflict.value) return
+  if (editing.value) finishEdit(editing.value.id, 'blur')
+  if (blank.value) return
+  resolvingConflict.value = true
+  saveError.value = ''
+  try {
+    const remote = await getDecision(record.id)
+    conflict.value = { remoteVersion: remote.version }
+    if (matchesSavedNodes(draft.value, remote.nodes)) {
+      await saveAgainst(remote)
+      return
+    }
+    try {
+      await ElMessageBox.confirm(
+        `用本页决策树覆盖远端 v${remote.version} 的节点和布局？保存前会下载远端备份。`,
+        '应用本地版本',
+        { confirmButtonText: '应用本地', cancelButtonText: '取消', type: 'warning' },
+      )
+    } catch {
+      return
+    }
+    downloadRemoteBackup(remote)
+    await saveAgainst(remote)
+  } catch (reason) {
+    saveError.value = (reason as Error).message
+  } finally {
+    resolvingConflict.value = false
+  }
+}
+
+function downloadRemoteBackup(record: DecisionRecord) {
+  const blob = new Blob([JSON.stringify(record, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `decision-${record.id}-remote-v${record.version}.json`
+  document.body.append(link)
+  link.click()
+  link.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
 function beforeUnload(event: BeforeUnloadEvent) {
@@ -334,10 +406,17 @@ function position(positions: Map<string, Point>) {
         </div>
         <div class="editor-actions">
           <span role="status">{{ saveStatus }} · v{{ decision.version }}</span>
-          <el-button :disabled="saving" @click="reload">重新加载</el-button>
+          <el-button v-if="!conflict" :disabled="saving" @click="reload">重新加载</el-button>
           <el-button v-if="saveError && !conflict" type="primary" :disabled="blank" @click="save">重试保存</el-button>
         </div>
       </header>
+      <el-alert v-if="conflict" title="远端已有新版本" type="warning" show-icon :closable="false">
+        <div class="conflict-actions">
+          <span>{{ conflict.remoteVersion ? `远端 v${conflict.remoteVersion} · ` : '' }}本页改动已保留，自动保存已暂停。</span>
+          <el-button size="small" :disabled="resolvingConflict" @click="applyRemote">应用远端</el-button>
+          <el-button size="small" :disabled="resolvingConflict" @click="applyLocal">应用本地</el-button>
+        </div>
+      </el-alert>
       <el-alert v-if="loadError || saveError" :title="loadError || saveError" type="error" show-icon :closable="false" />
       <el-button v-if="!decision" @click="load">重试</el-button>
       <div v-if="decision" class="editor-workspace">
@@ -388,6 +467,8 @@ function position(positions: Map<string, Point>) {
 .editor-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
 .editor-actions span { color: #53675c; font-size: .78rem; white-space: nowrap; }
 .editor-actions .el-button + .el-button { margin-left: 0; }
+.conflict-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.conflict-actions .el-button + .el-button { margin-left: 0; }
 .editor-workspace { margin-top: 12px; }
 @media (max-width: 760px) {
   .decision-editor { width: calc(100% - 24px); }
