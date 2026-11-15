@@ -959,3 +959,15 @@ textarea {
     gap: 6px;
   }
 }
+
+.trees-status {
+  display: inline-flex;
+  padding: 3px 9px;
+  border-radius: 4px;
+  background: #e9eeeb;
+  color: #42584e;
+  font-size: .75rem;
+  font-weight: 650;
+}
+.trees-status.thinking { background: #f6ecd8; color: #765717; }
+.trees-status.decided { background: #dceee0; color: #265439; }

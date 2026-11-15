@@ -6,6 +6,16 @@ export default createRouter({
   routes: [
     { path: '/', name: 'list', component: ListPage },
     {
+      path: '/decision-trees',
+      name: 'decision-trees',
+      component: () => import('./pages/DecisionTreesPage.vue'),
+    },
+    {
+      path: '/decision-trees/:id(\\d+)',
+      name: 'decision-tree',
+      component: () => import('./pages/DecisionTreePage.vue'),
+    },
+    {
       path: '/decision-models',
       name: 'decision-models',
       component: () => import('./pages/DecisionModelsPage.vue'),

@@ -61,4 +61,5 @@ Conclusion 不启动独立 MCP server。FengDock 的统一 OAuth MCP 加载 `app
 - `list_decision_models`、`get_decision_model`：`readOnlyHint: true`
 - `create_decision_model`、`update_decision_model`：`readOnlyHint: false`、`destructiveHint: false`、`idempotentHint: false`
 - `create_conclusion`、`update_conclusion` 同样属于写操作
-- 删除工具在 MVP 中不存在
+
+独立决策树的查询、写入及删除见 [决策树 MCP 契约](decision-trees.md)。

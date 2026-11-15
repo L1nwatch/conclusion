@@ -182,7 +182,9 @@ MCP 由 FengDock 的统一 OAuth 服务对外提供。读取工具：
 
 每个思考模型只定义 `name` 和简短的 `explanation` 两个业务字段。用户要求使用思考模型时，AI 应按 `list_decision_models` 的固定顺序把全部模型各过一遍，每个模型只做几句话的具体分析，再汇总为最终结论。
 
-Conclusion 的 `app/db.py` 提供可复用读写函数，FengDock 像加载 `vendor/fire/app/db.py` 一样加载它们。读取工具使用只读连接；写入工具使用普通事务连接，并通过 MCP annotations 明确标记副作用。MCP 不开放任何删除工具，Conclusion 和思考模型的删除都只能在网页明确确认。
+Conclusion 的 `app/db.py` 提供可复用读写函数。读取工具使用只读连接，写入工具使用普通事务连接，并通过 MCP annotations 标记副作用。网页支持删除 Conclusion 记录和思考模型。
+
+**Decision Trees** 支持在一个独立的树编辑器中记录每项决策，并通过 MCP 查询、创建、编辑或删除同一棵树。操作、版本检查和接口示例见 [决策树文档](docs/decision-trees.md)。
 
 `update_decision_model` 校验调用方最后读取到的 `expectedUpdatedAt`，再直接更新当前定义。网页的“思考模型”管理页支持创建、原地编辑和软删除；软删除只从当前注册表隐藏模型，历史 Conclusion 的分析内容仍保留。完整工具契约和 AI 使用流程见 [docs/mcp-contract.md](docs/mcp-contract.md)。
 
