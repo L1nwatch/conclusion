@@ -2,8 +2,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef } from 'vue'
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
-import type { InputInstance } from 'element-plus'
-import { getDecision, saveDecisionTree } from '../api'
+import { ApiError, getDecision, saveDecisionTree } from '../api'
 import DecisionTreeCanvas from '../components/DecisionTreeCanvas.vue'
 import {
   branch, containsNode, fillMissingPositions, indexTree, layoutBranch,
@@ -14,20 +13,33 @@ import type { DecisionNode, DecisionRecord, Point } from '../decisionTree'
 const route = useRoute()
 const decision = shallowRef<DecisionRecord | null>(null)
 const draft = shallowRef<DecisionNode[]>([])
+const canvas = ref<InstanceType<typeof DecisionTreeCanvas>>()
 const selectedId = ref('')
-const dirty = ref(false)
+const editing = shallowRef<{ id: string; original: string }>()
+const detailsId = ref('')
+const detailsOpen = ref(false)
+const revision = ref(0)
+const savedRevision = ref(0)
+const dirty = computed(() => revision.value !== savedRevision.value)
 const loading = ref(true)
 const saving = ref(false)
-const error = ref('')
-const textInput = ref<InputInstance>()
+const loadError = ref('')
+const saveError = ref('')
+const conflict = ref(false)
+let saveTimer: ReturnType<typeof setTimeout> | undefined
+let pendingSave: Promise<void> | undefined
 const tree = computed(() => indexTree(draft.value))
-const selected = computed(() => tree.value.byId.get(selectedId.value))
+const details = computed(() => tree.value.byId.get(detailsId.value))
 const blank = computed(() => draft.value.some(node => !node.text.trim()))
-const siblings = computed(() => selected.value?.parentId
-  ? tree.value.children.get(selected.value.parentId) ?? []
-  : [])
+const saveStatus = computed(() => {
+  if (conflict.value) return '保存冲突'
+  if (saveError.value) return '自动保存失败'
+  if (saving.value) return '正在保存…'
+  if (dirty.value) return blank.value ? '正在编辑节点' : '等待自动保存…'
+  return '已保存'
+})
 const parentOptions = computed(() => {
-  const item = selected.value
+  const item = details.value
   if (!item || !decision.value || item.parentId === null) return []
   const excluded = new Set(branch(tree.value, item.id).map(node => node.id))
   return branch(tree.value, decision.value.rootId).filter(node => !excluded.has(node.id))
@@ -54,45 +66,71 @@ function unpack(record: DecisionRecord): DecisionNode[] {
 }
 
 async function load() {
+  clearTimeout(saveTimer)
   loading.value = true
-  error.value = ''
+  loadError.value = ''
   try {
     const record = await getDecision(Number(route.params.id))
     const nodes = unpack(record)
     draft.value = withPositions(nodes, fillMissingPositions(indexTree(nodes), record.rootId, measure(nodes)))
     decision.value = record
     selectedId.value = record.rootId
-    dirty.value = false
+    editing.value = undefined
+    revision.value = 0
+    savedRevision.value = 0
+    saveError.value = ''
+    conflict.value = false
   } catch (reason) {
-    error.value = (reason as Error).message
+    loadError.value = (reason as Error).message
   } finally {
     loading.value = false
   }
 }
 
-async function save() {
-  if (!decision.value || blank.value || saving.value || !dirty.value) return
-  saving.value = true
-  error.value = ''
-  try {
-    const record = await saveDecisionTree(decision.value.id, decision.value.version, draft.value)
-    draft.value = unpack(record)
-    decision.value = record
-    dirty.value = false
-  } catch (reason) {
-    error.value = (reason as Error).message
-  } finally {
-    saving.value = false
+function scheduleSave() {
+  clearTimeout(saveTimer)
+  if (dirty.value && !blank.value && !saving.value && !conflict.value) {
+    saveTimer = setTimeout(() => void save(), 650)
   }
 }
 
-function leave() {
-  if (saving.value) return false
+function save(): Promise<void> | undefined {
+  clearTimeout(saveTimer)
+  if (pendingSave) return pendingSave
+  const record = decision.value
+  if (!record || blank.value || !dirty.value || conflict.value) return
+  const snapshot = draft.value
+  const submitted = revision.value
+  saving.value = true
+  saveError.value = ''
+  pendingSave = saveDecisionTree(record.id, record.version, snapshot).then(updated => {
+    decision.value = updated
+    savedRevision.value = submitted
+  }).catch((reason: Error) => {
+    saveError.value = reason.message
+    conflict.value = reason instanceof ApiError && reason.status === 409
+  }).finally(() => {
+    pendingSave = undefined
+    saving.value = false
+    if (!saveError.value) scheduleSave()
+  })
+  return pendingSave
+}
+
+async function leave() {
+  if (editing.value) finishEdit(editing.value.id, 'blur')
+  await pendingSave
+  while (dirty.value && !saveError.value) {
+    const writing = save()
+    if (!writing) break
+    await writing
+  }
   return !dirty.value || window.confirm('尚有未保存的更改。确定放弃这些更改？')
 }
 
 function reload() {
-  if (leave()) void load()
+  if (saving.value) return
+  if (!dirty.value || window.confirm('重新加载会放弃本页尚未保存的更改。继续？')) void load()
 }
 
 function beforeUnload(event: BeforeUnloadEvent) {
@@ -108,22 +146,40 @@ onMounted(() => {
   void load()
   window.addEventListener('beforeunload', beforeUnload)
 })
-onUnmounted(() => window.removeEventListener('beforeunload', beforeUnload))
+onUnmounted(() => {
+  clearTimeout(saveTimer)
+  window.removeEventListener('beforeunload', beforeUnload)
+})
 
 function change(nodes: DecisionNode[]) {
   draft.value = nodes
-  dirty.value = true
+  revision.value++
+  scheduleSave()
 }
 
 function patchNode(id: string, changes: Partial<DecisionNode>) {
   change(draft.value.map(node => node.id === id ? { ...node, ...changes } : node))
 }
 
-async function editText(id: string, select = false) {
+function editText(id: string) {
+  const node = tree.value.byId.get(id)
+  if (!node || editing.value?.id === id) return
   selectedId.value = id
-  await nextTick()
-  if (select) textInput.value?.select()
-  else textInput.value?.focus()
+  editing.value = { id, original: node.text || '新节点' }
+}
+
+function updateText(id: string, text: string) {
+  if (editing.value?.id === id && tree.value.byId.get(id)?.text !== text) patchNode(id, { text })
+}
+
+function finishEdit(id: string, action: 'blur' | 'confirm' | 'cancel') {
+  const item = editing.value
+  if (item?.id !== id) return
+  const current = tree.value.byId.get(id)?.text ?? ''
+  const text = action === 'cancel' ? item.original : current.trim() || item.original
+  editing.value = undefined
+  if (current !== text) patchNode(id, { text })
+  if (action !== 'blur') void nextTick(() => canvas.value?.focusNode(id))
 }
 
 function toggle(id: string) {
@@ -137,7 +193,8 @@ function addNode(parentId: string, order?: number) {
   if (!decision.value) return
   const id = Array.from(crypto.getRandomValues(new Uint8Array(16)),
     byte => byte.toString(16).padStart(2, '0')).join('')
-  const index = order ?? tree.value.children.get(parentId)?.length ?? 0
+  const siblings = tree.value.children.get(parentId) ?? []
+  const index = order ?? siblings.length
   const nodes = [
     ...draft.value.map(node => {
       if (node.id === parentId) return { ...node, collapsed: false }
@@ -145,12 +202,40 @@ function addNode(parentId: string, order?: number) {
       return node
     }),
     {
-      id, parentId, order: index, text: '新节点', description: null, type: null,
+      id, parentId, order: index, text: '', description: null, type: null,
       collapsed: false, positionX: null, positionY: null,
     },
   ]
-  change(withPositions(nodes, fillMissingPositions(indexTree(nodes), decision.value.rootId, measure(nodes))))
-  void editText(id, true)
+  const indexed = indexTree(nodes)
+  const positions = index < siblings.length
+    ? layoutAtParent(indexed, parentId)
+    : fillMissingPositions(indexed, decision.value.rootId, measure(nodes))
+  change(withPositions(nodes, positions))
+  editText(id)
+}
+
+function command(id: string, action: string) {
+  const node = tree.value.byId.get(id)
+  if (!node) return
+  if (editing.value && action !== 'edit') finishEdit(editing.value.id, 'blur')
+  selectedId.value = id
+  if (action === 'child') addNode(id)
+  else if (action === 'sibling' && node.parentId) addNode(node.parentId, node.order + 1)
+  else if (action === 'edit') editText(id)
+  else if (action === 'properties') {
+    detailsId.value = id
+    detailsOpen.value = true
+  } else if (action === 'delete') void deleteBranch(node)
+  else if ((action === 'up' || action === 'down') && node.parentId) {
+    moveNode(id, node.parentId, node.order + (action === 'up' ? -1 : 1))
+  }
+}
+
+function layoutAtParent(index: ReturnType<typeof indexTree>, parentId: string) {
+  const parent = index.byId.get(parentId)!
+  return layoutBranch(index, parentId, measure(branch(index, parentId)), {
+    x: parent.positionX ?? 0, y: parent.positionY ?? 0,
+  })
 }
 
 function moveNode(id: string, parentId: string, order: number) {
@@ -160,6 +245,7 @@ function moveNode(id: string, parentId: string, order: number) {
   if (node.parentId === parentId && node.order === order) return
 
   const destination = (tree.value.children.get(parentId) ?? []).filter(sibling => sibling.id !== id)
+  if (order < 0 || order > destination.length) return
   destination.splice(order, 0, node)
   const orders = new Map(destination.map((sibling, index) => [sibling.id, index]))
   const nodes = draft.value.map(current => {
@@ -171,11 +257,7 @@ function moveNode(id: string, parentId: string, order: number) {
     }
     return current
   })
-  const updated = indexTree(nodes)
-  const positions = layoutBranch(updated, parentId, measure(branch(updated, parentId)), {
-    x: parent.positionX ?? 0, y: parent.positionY ?? 0,
-  })
-  change(withPositions(nodes, positions))
+  change(withPositions(nodes, layoutAtParent(indexTree(nodes), parentId)))
   selectedId.value = id
 }
 
@@ -224,69 +306,47 @@ function position(positions: Map<string, Point>) {
           <span class="trees-status" :class="decision.status.toLowerCase()">{{ decision.status }}</span>
         </div>
         <div class="editor-actions">
-          <span aria-live="polite">{{ dirty ? '有未保存的更改' : '已保存' }} · v{{ decision.version }}</span>
+          <span role="status">{{ saveStatus }} · v{{ decision.version }}</span>
           <el-button :disabled="saving" @click="reload">重新加载</el-button>
-          <el-button type="primary" :loading="saving" :disabled="!dirty || blank" @click="save">保存决策树</el-button>
+          <el-button v-if="saveError && !conflict" type="primary" :disabled="blank" @click="save">重试保存</el-button>
         </div>
       </header>
-      <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" />
+      <el-alert v-if="loadError || saveError" :title="loadError || saveError" type="error" show-icon :closable="false" />
       <el-button v-if="!decision" @click="load">重试</el-button>
       <div v-if="decision" class="editor-workspace">
         <DecisionTreeCanvas
-          :nodes="draft" :root-id="decision.rootId" :selected-id="selectedId" :disabled="saving"
-          @select="selectedId = $event" @edit="editText" @toggle="toggle" @arrange="arrange"
+          ref="canvas" :nodes="draft" :root-id="decision.rootId" :selected-id="selectedId" :editing-id="editing?.id ?? ''"
+          @select="selectedId = $event" @edit="editText" @text="updateText" @finish="finishEdit"
+          @command="command" @toggle="toggle" @arrange="arrange"
           @move="moveNode" @position="position"
         />
-        <aside v-if="selected" class="node-inspector" aria-labelledby="node-inspector-title">
-          <h2 id="node-inspector-title">编辑节点</h2>
-          <el-form label-position="top" :disabled="saving" @submit.prevent>
-            <el-form-item label="节点文字" :error="!selected.text.trim() ? '请输入节点文字' : ''">
-              <el-input
-                ref="textInput" type="textarea" :rows="3" maxlength="4000" :model-value="selected.text"
-                @update:model-value="patchNode(selected.id, { text: $event })"
-              />
-            </el-form-item>
+        <el-dialog v-model="detailsOpen" title="节点属性" width="min(440px, calc(100vw - 32px))">
+          <el-form v-if="details" label-position="top" @submit.prevent>
             <el-form-item label="备注">
               <el-input
-                type="textarea" :rows="2" maxlength="10000" :model-value="selected.description ?? ''"
-                @update:model-value="patchNode(selected.id, { description: $event || null })"
+                type="textarea" :rows="3" maxlength="10000" :model-value="details.description ?? ''"
+                @update:model-value="patchNode(details.id, { description: $event || null })"
               />
             </el-form-item>
             <el-form-item label="类型">
               <el-select
-                clearable placeholder="可选" :model-value="selected.type ?? ''"
-                @change="patchNode(selected.id, { type: $event || null })"
+                clearable placeholder="可选" :model-value="details.type ?? ''"
+                @change="patchNode(details.id, { type: $event || null })"
               >
                 <el-option v-for="name in NODE_TYPES" :key="name" :value="name" />
               </el-select>
             </el-form-item>
-            <div class="inspector-group">
-              <el-button @click="addNode(selected.id)">添加子节点</el-button>
-              <el-button v-if="selected.parentId" @click="addNode(selected.parentId, selected.order + 1)">添加同级</el-button>
-            </div>
-            <template v-if="selected.parentId">
-              <el-form-item label="父节点" class="parent-select">
-                <el-select
-                  filterable :model-value="selected.parentId"
-                  @change="changeParent(selected.id, $event)"
-                >
-                  <el-option v-for="node in parentOptions" :key="node.id" :value="node.id" :label="node.text.slice(0, 100)" />
-                </el-select>
-              </el-form-item>
-              <div class="inspector-group">
-                <el-button
-                  :disabled="selected.order === 0"
-                  @click="moveNode(selected.id, selected.parentId, selected.order - 1)"
-                >上移</el-button>
-                <el-button
-                  :disabled="selected.order >= siblings.length - 1"
-                  @click="moveNode(selected.id, selected.parentId, selected.order + 1)"
-                >下移</el-button>
-                <el-button type="danger" text @click="deleteBranch(selected)">删除分支</el-button>
-              </div>
-            </template>
+            <el-form-item v-if="details.parentId" label="父节点">
+              <el-select
+                filterable :model-value="details.parentId"
+                @change="changeParent(details.id, $event)"
+              >
+                <el-option v-for="node in parentOptions" :key="node.id" :value="node.id" :label="node.text.slice(0, 100)" />
+              </el-select>
+            </el-form-item>
           </el-form>
-        </aside>
+          <template #footer><el-button type="primary" @click="detailsOpen = false">完成</el-button></template>
+        </el-dialog>
       </div>
     </template>
   </main>
@@ -300,16 +360,11 @@ function position(positions: Map<string, Point>) {
 .editor-title p { white-space: pre-wrap; margin: 8px 0; color: #50675b; }
 .editor-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
 .editor-actions span { color: #53675c; font-size: .78rem; white-space: nowrap; }
-.editor-actions .el-button + .el-button, .inspector-group .el-button + .el-button { margin-left: 0; }
-.editor-workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(230px, 280px); gap: 12px; margin-top: 12px; }
-.node-inspector { min-width: 0; align-self: start; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); }
-.node-inspector h2 { font-size: 1rem; margin: 0 0 16px; }
-.inspector-group { display: flex; gap: 6px; flex-wrap: wrap; }
-.parent-select { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 14px; }
+.editor-actions .el-button + .el-button { margin-left: 0; }
+.editor-workspace { margin-top: 12px; }
 @media (max-width: 760px) {
   .decision-editor { width: calc(100% - 24px); }
   .editor-header { align-items: start; flex-direction: column; }
   .editor-actions { justify-content: start; }
-  .editor-workspace { grid-template-columns: minmax(0, 1fr); }
 }
 </style>

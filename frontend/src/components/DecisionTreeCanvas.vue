@@ -11,11 +11,14 @@ const props = defineProps<{
   nodes: DecisionNode[]
   rootId: string
   selectedId: string
-  disabled: boolean
+  editingId: string
 }>()
 const emit = defineEmits<{
   select: [id: string]
   edit: [id: string]
+  text: [id: string, text: string]
+  finish: [id: string, action: 'blur' | 'confirm' | 'cancel']
+  command: [id: string, action: string]
   toggle: [id: string]
   arrange: []
   move: [id: string, parentId: string, order: number]
@@ -23,6 +26,7 @@ const emit = defineEmits<{
 }>()
 
 const flow = useVueFlow()
+const canvas = ref<HTMLElement>()
 const tree = computed(() => indexTree(props.nodes))
 const visible = computed(() => branch(tree.value, props.rootId, true))
 interface CardData {
@@ -30,6 +34,8 @@ interface CardData {
   collapsed: boolean
   childCount: number
   type: string | null
+  canMoveUp: boolean
+  canMoveDown: boolean
 }
 const nodes = computed<FlowNode<CardData>[]>(() => visible.value.map(node => ({
   id: node.id,
@@ -38,6 +44,9 @@ const nodes = computed<FlowNode<CardData>[]>(() => visible.value.map(node => ({
   data: {
     text: node.text, collapsed: node.collapsed, type: node.type,
     childCount: tree.value.children.get(node.id)?.length ?? 0,
+    canMoveUp: node.order > 0,
+    canMoveDown: node.parentId !== null &&
+      node.order < (tree.value.children.get(node.parentId)?.length ?? 0) - 1,
   },
 })))
 const edges = computed<Edge[]>(() => visible.value.flatMap(node => node.parentId === null ? [] : [{
@@ -47,6 +56,74 @@ const edges = computed<Edge[]>(() => visible.value.flatMap(node => node.parentId
   type: 'smoothstep',
   style: { stroke: '#81998e', strokeWidth: 1.6 },
 }]))
+
+function focusNode(id: string) {
+  canvas.value?.querySelector<HTMLButtonElement>(
+    `[data-node-id="${CSS.escape(id)}"] button.decision-node-label`,
+  )?.focus({ preventScroll: true })
+}
+defineExpose({ focusNode })
+
+function selectCard(id: string) {
+  emit('select', id)
+  if (props.editingId !== id) focusNode(id)
+}
+
+function focusInput(element: unknown) {
+  if (!(element instanceof HTMLTextAreaElement) || element === document.activeElement) return
+  requestAnimationFrame(() => {
+    if (!canvas.value || !element.isConnected || document.activeElement === element) return
+    element.focus({ preventScroll: true })
+    element.setSelectionRange(element.value.length, element.value.length)
+    const bounds = canvas.value.getBoundingClientRect()
+    const card = (element.closest('.decision-node-card') ?? element).getBoundingClientRect()
+    const dx = Math.max(0, bounds.left + 16 - card.left) - Math.max(0, card.right - bounds.right + 16)
+    const dy = Math.max(0, bounds.top + 60 - card.top) - Math.max(0, card.bottom - bounds.bottom + 52)
+    if (dx || dy) {
+      const viewport = flow.getViewport()
+      void flow.setViewport({ ...viewport, x: viewport.x + dx, y: viewport.y + dy })
+    }
+  })
+}
+
+function shortcut(event: KeyboardEvent, id: string, editing = false) {
+  if (event.isComposing || event.keyCode === 229 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return
+  const key = event.key
+  if (key === 'Tab') {
+    event.preventDefault()
+    emit('command', id, 'child')
+  } else if (key === 'Enter') {
+    event.preventDefault()
+    if (editing) emit('finish', id, 'confirm')
+    else if (id !== props.rootId) emit('command', id, 'sibling')
+    else emit('edit', id)
+  } else if (key === 'Escape') {
+    event.preventDefault()
+    event.stopPropagation()
+    if (editing) emit('finish', id, 'cancel')
+    else {
+      emit('select', '')
+      canvas.value?.focus({ preventScroll: true })
+    }
+  } else if (!editing && key === 'F2') {
+    event.preventDefault()
+    emit('edit', id)
+  } else if (!editing && (key === 'Delete' || key === 'Backspace') && id !== props.rootId) {
+    event.preventDefault()
+    emit('command', id, 'delete')
+  }
+}
+
+function updateText(event: Event, id: string) {
+  if (event instanceof InputEvent && event.isComposing) return
+  emit('text', id, (event.target as HTMLTextAreaElement).value)
+}
+
+function openNodeMenu(event: MouseEvent) {
+  const button = (event.currentTarget as HTMLElement).querySelector<HTMLButtonElement>('.node-menu')
+  button?.focus({ preventScroll: true })
+  button?.click()
+}
 
 function pointOf(node: DecisionNode): Point {
   return { x: node.positionX ?? 0, y: node.positionY ?? 0 }
@@ -87,7 +164,7 @@ const movingId = ref('')
 const drop = ref<{ target: string; location: DropLocation } | null>(null)
 
 function startBranchDrag(event: DragEvent, id: string) {
-  if (props.disabled || !event.dataTransfer) {
+  if (!event.dataTransfer) {
     event.preventDefault()
     return
   }
@@ -141,59 +218,100 @@ function dropBranch(event: DragEvent, id: string) {
 </script>
 
 <template>
-  <div class="tree-canvas">
+  <div ref="canvas" class="tree-canvas" tabindex="-1">
     <div class="canvas-toolbar" aria-label="画布工具">
       <div class="canvas-zoom" role="group" aria-label="缩放">
         <button type="button" aria-label="缩小" title="缩小" @click="flow.zoomOut()">−</button>
         <button type="button" aria-label="放大" title="放大" @click="flow.zoomIn()">+</button>
       </div>
       <button type="button" @click="flow.fitView({ padding: .13, maxZoom: 1 })">适应画布</button>
-      <button type="button" :disabled="disabled" @click="emit('arrange')">自动布局</button>
+      <button type="button" @click="emit('arrange')">自动布局</button>
     </div>
     <VueFlow
       :id="flow.id" :nodes="nodes" :edges="edges"
-      :nodes-draggable="!disabled" :nodes-connectable="false"
+      :nodes-connectable="false" :nodes-focusable="false"
       :elements-selectable="false" :delete-key-code="null"
       :zoom-on-double-click="false" :min-zoom=".03" :max-zoom="2.5"
       :node-drag-threshold="4" :fit-view-on-init="true"
       :fit-view-on-init-options="{ padding: .13, maxZoom: 1 }"
       @node-drag-start="startPositionDrag" @node-drag="previewPosition" @node-drag-stop="finishPosition"
+      @pane-click="emit('select', '')"
     >
       <template #node-branch="{ id, data }">
         <article
           class="decision-node-card"
           :class="[
             data.type?.toLowerCase(),
-            { root: id === rootId, selected: id === selectedId, moving: id === movingId },
+            { root: id === rootId, selected: id === selectedId, editing: id === editingId, moving: id === movingId },
             drop?.target === id ? 'drop-' + drop.location : '',
           ]"
           :data-node-id="id"
           @dragover="dragOver($event, id)" @dragleave="dragLeave($event, id)" @drop="dropBranch($event, id)"
+          @click="selectCard(id)" @dblclick.stop="emit('edit', id)"
+          @contextmenu.prevent.stop="openNodeMenu"
         >
           <Handle v-if="id !== rootId" type="target" :position="Position.Left" :connectable="false" />
+          <div v-if="id === editingId" class="node-inline-edit nodrag nowheel" @dblclick.stop>
+            <span class="decision-node-label" aria-hidden="true">{{ data.text + '\u200b' }}</span>
+            <textarea
+              :ref="focusInput" class="decision-node-label"
+              aria-label="节点文字" placeholder="输入节点文字" maxlength="4000" rows="1"
+              :value="data.text"
+              @input="updateText($event, id)" @compositionend="updateText($event, id)"
+              @keydown="shortcut($event, id, true)" @blur="emit('finish', id, 'blur')"
+            />
+          </div>
           <button
-            class="decision-node-label" type="button"
-            @click="emit('select', id)" @dblclick.stop="emit('edit', id)"
+            v-else class="decision-node-label" type="button"
+            :aria-pressed="id === selectedId" aria-keyshortcuts="Tab Enter F2"
+            title="双击编辑节点" @focus="emit('select', id)" @keydown="shortcut($event, id)"
           >{{ data.text || '未命名节点' }}</button>
           <button
             v-if="id !== rootId" class="branch-grip nodrag" type="button"
-            :draggable="!disabled" :disabled="disabled" aria-label="拖拽分支"
+            draggable="true" aria-label="拖拽分支"
             title="拖到节点中间可成为子节点，拖到上沿或下沿可调整同级顺序"
-            @dragstart="startBranchDrag($event, id)" @dragend="endBranchDrag" @click="emit('select', id)"
+            @dragstart="startBranchDrag($event, id)" @dragend="endBranchDrag" @dblclick.stop
           >⠿</button>
           <button
             v-if="data.childCount" class="branch-fold nodrag" type="button"
-            :disabled="disabled" :aria-label="data.collapsed ? '展开分支' : '折叠分支'"
+            :aria-label="data.collapsed ? '展开分支' : '折叠分支'"
             :aria-expanded="!data.collapsed"
             :title="data.collapsed ? '展开分支' : '折叠分支'"
-            @click.stop="emit('toggle', id)"
+            @click.stop="emit('toggle', id)" @dblclick.stop
           >{{ data.collapsed ? '+' : '−' }}</button>
+          <el-dropdown
+            class="node-actions nodrag" trigger="click" placement="right-start"
+            @command="emit('command', id, $event)"
+          >
+            <button
+              class="node-menu" type="button" aria-label="节点操作" title="节点操作"
+              @click.stop="emit('select', id)" @dblclick.stop
+            >⋯</button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="child">添加子节点 <kbd>Tab</kbd></el-dropdown-item>
+                <el-dropdown-item v-if="id !== rootId" command="sibling">添加同级 <kbd>Enter</kbd></el-dropdown-item>
+                <el-dropdown-item command="edit">编辑文字 <kbd>F2</kbd></el-dropdown-item>
+                <el-dropdown-item command="properties">节点属性</el-dropdown-item>
+                <template v-if="id !== rootId">
+                  <el-dropdown-item command="up" :disabled="!data.canMoveUp" divided>上移</el-dropdown-item>
+                  <el-dropdown-item command="down" :disabled="!data.canMoveDown">下移</el-dropdown-item>
+                  <el-dropdown-item command="delete" divided>删除分支</el-dropdown-item>
+                </template>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
           <Handle type="source" :position="Position.Right" :connectable="false" />
         </article>
       </template>
     </VueFlow>
     <div class="canvas-hint">
-      拖动节点可移动整条分支。拖动 ⠿ 到节点中间可成为子节点，拖到上沿或下沿可调整同级顺序。
+      <template v-if="editingId">
+        <kbd>Enter</kbd> 完成 · <kbd>Shift + Enter</kbd> 换行 · <kbd>Esc</kbd> 取消
+      </template>
+      <template v-else>
+        双击编辑 · 选中后按 <kbd>Tab</kbd> 新增子节点、<kbd>Enter</kbd> 新增同级
+      </template>
     </div>
   </div>
 </template>
@@ -220,6 +338,7 @@ function dropBranch(event: DragEvent, id: string) {
   top: 0;
   left: 0;
 }
+.el-dropdown-menu kbd { margin-inline-start: 12px; color: #60766b; font-size: .75em; }
 </style>
 
 <style scoped>
@@ -231,8 +350,7 @@ function dropBranch(event: DragEvent, id: string) {
   border: 1px solid #c9d5cc;
   border-radius: 12px;
   overflow: hidden;
-  background: radial-gradient(#bbc9bf 1px, transparent 1px) #edf2ee;
-  background-size: 20px 20px;
+  background: #edf2ee;
 }
 .canvas-toolbar {
   display: flex;
@@ -293,6 +411,7 @@ function dropBranch(event: DragEvent, id: string) {
 .decision-node-card.outcome { border-left-color: #7b63a4; }
 .decision-node-card.note { border-left-color: #799390; }
 .decision-node-card.selected { outline: 3px solid #428a69; outline-offset: 2px; }
+.decision-node-card.editing { outline: 3px solid #15805c; outline-offset: 2px; }
 .decision-node-card.moving { opacity: .7; }
 .decision-node-card.drop-child { outline: 3px solid #0b754b; background: #d7f4e6; color: #142f22; }
 .decision-node-card.drop-before::before, .decision-node-card.drop-after::before {
@@ -308,6 +427,25 @@ function dropBranch(event: DragEvent, id: string) {
 .decision-node-card.drop-after::before { bottom: -7px; }
 .decision-node-card .decision-node-label { color: inherit; cursor: grab; }
 .decision-node-card .decision-node-label:active { cursor: grabbing; }
+.node-inline-edit {
+  display: grid;
+  background: #effaf2;
+  box-shadow: 0 0 0 4px #effaf2, 0 0 0 5px #62a982;
+  border-radius: 3px;
+  color: #153b2a;
+}
+.node-inline-edit > * { grid-area: 1 / 1; }
+.node-inline-edit span { visibility: hidden; }
+.decision-node-card .node-inline-edit textarea {
+  display: block;
+  resize: none;
+  overflow: hidden;
+  outline: none;
+  cursor: text;
+  caret-color: #124a36;
+  user-select: text;
+}
+.node-inline-edit textarea::placeholder { color: #507364; }
 .branch-grip, .branch-fold {
   position: absolute;
   right: 5px;
@@ -322,9 +460,25 @@ function dropBranch(event: DragEvent, id: string) {
   line-height: 1;
   cursor: pointer;
 }
-.branch-grip { top: 5px; cursor: grab; }
-.branch-fold { bottom: 5px; }
+.branch-grip { top: 2px; height: 19px; cursor: grab; }
+.branch-fold { bottom: 2px; height: 19px; }
 .branch-grip:hover, .branch-fold:hover { background: #87a39544; }
+.node-actions { position: absolute; right: 5px; top: 23px; }
+.root .node-actions { top: 5px; }
+.node-menu {
+  width: 24px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.node-menu:hover, .node-menu:focus-visible { background: #87a39544; }
+.decision-node-card.root .node-actions { color: white; }
 .decision-node-card :deep(.vue-flow__handle) { opacity: 0; pointer-events: none; }
 @media (max-width: 760px) { .tree-canvas { height: 62vh; min-height: 370px; } }
 </style>
