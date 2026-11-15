@@ -98,6 +98,7 @@ def test_init_db_creates_idempotent_schema(tmp_path: Path) -> None:
         "conclusion_tags",
         "decision_analyses",
         "decision_models",
+        "decisions",
     } <= tables
 
 
@@ -144,6 +145,10 @@ def test_init_db_migrates_existing_conclusions_with_default_conditions(tmp_path:
         ).fetchone()
 
     assert migrated["conditions"] == ""
+    with TestClient(create_app(database_path, frontend_dist=None)) as client:
+        assert client.get("/api/decisions").json() == {"count": 0, "offset": 0, "items": []}
+        assert client.post("/api/decisions", json={"title": "After migration"}).status_code == 201
+        assert client.get("/api/conclusions/1").json()["title"] == VALID_CONCLUSION["title"]
 
 
 def test_init_db_collapses_versioned_decision_models_to_latest_row(

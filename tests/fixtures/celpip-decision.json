@@ -1,0 +1,21 @@
+{
+  "title": "CEC 抽签后的英语与 PR 策略",
+  "status": "Thinking",
+  "nodes": [
+    {"id": "celpip", "parentId": null, "text": "CELPIP", "type": "Topic", "order": 0},
+    {"id": "draw", "parentId": "celpip", "text": "有 CEC 抽签", "type": "Condition", "order": 0},
+    {"id": "score", "parentId": "draw", "text": "查看最低 CRS 分数", "type": "Action", "order": 0},
+    {"id": "high", "parentId": "score", "text": ">=575", "type": "Condition", "order": 0},
+    {"id": "observe", "parentId": "high", "text": "暂时不再考试，继续观察", "type": "Action", "order": 0},
+    {"id": "mid", "parentId": "score", "text": "559–574", "type": "Condition", "order": 1},
+    {"id": "mid-high", "parentId": "mid", "text": "567–574", "type": "Condition", "order": 0},
+    {"id": "retake", "parentId": "mid-high", "text": "考虑再次报考 CELPIP", "type": "Action", "order": 0},
+    {"id": "mid-low", "parentId": "mid", "text": "559–566", "type": "Condition", "order": 1},
+    {"id": "wait-draw", "parentId": "mid-low", "text": "等待后续 CEC 抽签", "type": "Action", "order": 0},
+    {"id": "low", "parentId": "score", "text": "<=558", "type": "Condition", "order": 2},
+    {"id": "ita", "parentId": "low", "text": "等待 ITA", "type": "Outcome", "order": 0},
+    {"id": "no-draw", "parentId": "celpip", "text": "没有 CEC 抽签", "type": "Condition", "order": 1},
+    {"id": "pr", "parentId": "no-draw", "text": "继续准备 PR 材料", "type": "Action", "order": 0},
+    {"id": "travel", "parentId": "no-draw", "text": "继续评估年底回国计划", "type": "Action", "order": 1}
+  ]
+}

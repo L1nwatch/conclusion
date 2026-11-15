@@ -5,11 +5,12 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Query, status
+from fastapi import FastAPI, HTTPException, Query, Request, status
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from app.db import (
+from . import db
+from .db import (
     ConclusionUpdateConflictError,
     DecisionModelAlreadyExistsError,
     DecisionModelUpdateConflictError,
@@ -27,7 +28,7 @@ from app.db import (
     update_conclusion,
     update_decision_model,
 )
-from app.schemas import (
+from .schemas import (
     ConclusionCreate,
     ConclusionList,
     ConclusionRecord,
@@ -36,6 +37,12 @@ from app.schemas import (
     DecisionModelList,
     DecisionModelRecord,
     DecisionModelUpdate,
+    DecisionCreate,
+    DecisionList,
+    DecisionRecord,
+    DecisionStatus,
+    DecisionTreeUpdate,
+    DecisionUpdate,
 )
 
 
@@ -238,6 +245,61 @@ def create_app(
         if not deleted:
             raise HTTPException(status_code=404, detail="Conclusion not found")
         return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    @app.exception_handler(db.DecisionNotFoundError)
+    @app.exception_handler(db.InvalidDecisionTreeError)
+    @app.exception_handler(db.DecisionVersionConflictError)
+    def decision_error(_: Request, error: Exception) -> JSONResponse:
+        if isinstance(error, db.DecisionVersionConflictError):
+            return JSONResponse(
+                status_code=409,
+                content={"detail": {"message": str(error), "currentVersion": error.current_version}},
+            )
+        code = 404 if isinstance(error, db.DecisionNotFoundError) else 422
+        return JSONResponse(status_code=code, content={"detail": str(error)})
+
+    @app.get("/api/decisions", response_model=DecisionList, tags=["decision-trees"])
+    def get_decisions(
+        query: str | None = Query(default=None, max_length=200),
+        decision_status: DecisionStatus | None = Query(default=None, alias="status"),
+        limit: int = Query(default=50, ge=1, le=200),
+        offset: int = Query(default=0, ge=0),
+    ) -> dict[str, object]:
+        with connect(database_path, read_only=True) as connection:
+            return db.list_decisions(
+                connection, query=query, status=decision_status, limit=limit, offset=offset
+            )
+
+    @app.post("/api/decisions", response_model=DecisionRecord, status_code=201, tags=["decision-trees"])
+    def post_decision(payload: DecisionCreate) -> dict[str, object]:
+        with connect(database_path) as connection:
+            return db.create_decision(connection, payload.model_dump())
+
+    @app.get("/api/decisions/{decision_id}", response_model=DecisionRecord, tags=["decision-trees"])
+    def get_decision_by_id(decision_id: int) -> dict[str, object]:
+        with connect(database_path, read_only=True) as connection:
+            return db.get_decision(connection, decision_id)
+
+    @app.patch("/api/decisions/{decision_id}", response_model=DecisionRecord, tags=["decision-trees"])
+    def patch_decision(decision_id: int, payload: DecisionUpdate) -> dict[str, object]:
+        with connect(database_path) as connection:
+            return db.update_decision(
+                connection, decision_id, payload.expected_version,
+                payload.model_dump(exclude_unset=True, exclude={"expected_version"}),
+            )
+
+    @app.patch("/api/decisions/{decision_id}/tree", response_model=DecisionRecord, tags=["decision-trees"])
+    def patch_decision_tree(decision_id: int, payload: DecisionTreeUpdate) -> dict[str, object]:
+        with connect(database_path) as connection:
+            return db.update_decision_tree(connection, decision_id, payload.db_values())
+
+    @app.delete("/api/decisions/{decision_id}", status_code=204, tags=["decision-trees"])
+    def delete_decision_by_id(
+        decision_id: int, expected_version: int = Query(alias="expectedVersion", ge=1)
+    ) -> Response:
+        with connect(database_path) as connection:
+            db.delete_decision(connection, decision_id, expected_version)
+        return Response(status_code=204)
 
     @app.get("/{full_path:path}", include_in_schema=False)
     def spa_fallback(full_path: str):

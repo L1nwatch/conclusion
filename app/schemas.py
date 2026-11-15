@@ -3,12 +3,177 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic.alias_generators import to_camel
 
 
 Confidence = Literal["High", "Medium", "Low"]
+
+
+DecisionStatus = Literal["Draft", "Thinking", "Decided"]
+DecisionNodeType = Literal["Topic", "Condition", "Action", "Outcome", "Note"]
+DecisionNodeId = Annotated[str, Field(pattern=r"^[A-Za-z0-9_-]{1,128}$")]
+DecisionTitle = Annotated[str, Field(min_length=1, max_length=200)]
+DecisionText = Annotated[str, Field(min_length=1, max_length=4000)]
+DecisionDescription = Annotated[str, Field(max_length=10000)]
+DecisionCoordinate = Annotated[float, Field(allow_inf_nan=False, ge=-1e9, le=1e9)]
+DecisionVersion = Annotated[int, Field(ge=1)]
+
+
+class DecisionPayload(BaseModel):
+    model_config = ConfigDict(
+        alias_generator=to_camel, populate_by_name=True, extra="forbid", str_strip_whitespace=True
+    )
+
+
+class DecisionNodeInput(DecisionPayload):
+    id: DecisionNodeId
+    parent_id: DecisionNodeId | None = None
+    text: DecisionText
+    description: DecisionDescription | None = None
+    type: DecisionNodeType | None = None
+    order: int = Field(default=0, ge=0)
+    position_x: DecisionCoordinate | None = None
+    position_y: DecisionCoordinate | None = None
+    collapsed: bool = False
+
+    @model_validator(mode="after")
+    def validate_position(self) -> DecisionNodeInput:
+        if (self.position_x is None) != (self.position_y is None):
+            raise ValueError("positionX and positionY must both be set or both be null")
+        return self
+
+
+class DecisionCreate(DecisionPayload):
+    title: DecisionTitle
+    description: DecisionDescription | None = None
+    status: DecisionStatus = "Draft"
+    nodes: list[DecisionNodeInput] | None = Field(default=None, min_length=1)
+
+
+class DecisionSummary(DecisionPayload):
+    id: int
+    title: DecisionTitle
+    description: DecisionDescription | None
+    status: DecisionStatus
+    version: DecisionVersion
+    created_at: datetime
+    updated_at: datetime
+
+
+class DecisionNodeRecord(DecisionNodeInput):
+    decision_id: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class DecisionRecord(DecisionSummary):
+    root_id: DecisionNodeId
+    nodes: list[DecisionNodeRecord]
+
+
+class DecisionList(DecisionPayload):
+    count: int
+    offset: int
+    items: list[DecisionSummary]
+
+
+class DecisionChanges(DecisionPayload):
+    title: DecisionTitle | None = None
+    description: DecisionDescription | None = None
+    status: DecisionStatus | None = None
+
+    @field_validator("title", "status")
+    @classmethod
+    def require_value(cls, value: str | None) -> str:
+        if value is None:
+            raise ValueError("must not be null")
+        return value
+
+
+class DecisionUpdate(DecisionChanges):
+    expected_version: DecisionVersion
+
+
+class DecisionNodeChanges(DecisionPayload):
+    text: DecisionText | None = None
+    description: DecisionDescription | None = None
+    type: DecisionNodeType | None = None
+    position_x: DecisionCoordinate | None = None
+    position_y: DecisionCoordinate | None = None
+    collapsed: bool | None = None
+
+    @model_validator(mode="after")
+    def validate_changes(self) -> DecisionNodeChanges:
+        fields = self.model_fields_set
+        if not fields:
+            raise ValueError("At least one node field is required")
+        if ("text" in fields and self.text is None) or ("collapsed" in fields and self.collapsed is None):
+            raise ValueError("text and collapsed must not be null")
+        if bool(fields & {"position_x", "position_y"}) and (
+            not {"position_x", "position_y"} <= fields
+            or (self.position_x is None) != (self.position_y is None)
+        ):
+            raise ValueError("Set both coordinates together, or clear both with null")
+        return self
+
+
+class AddDecisionNode(DecisionPayload):
+    op: Literal["add"]
+    id: DecisionNodeId
+    parent_id: DecisionNodeId
+    text: DecisionText
+    description: DecisionDescription | None = None
+    type: DecisionNodeType | None = None
+    order: int | None = Field(default=None, ge=0)
+
+
+class EditDecisionNode(DecisionPayload):
+    op: Literal["update"]
+    id: DecisionNodeId
+    changes: DecisionNodeChanges
+
+
+class MoveDecisionNode(DecisionPayload):
+    op: Literal["move"]
+    id: DecisionNodeId
+    parent_id: DecisionNodeId
+    order: int | None = Field(default=None, ge=0)
+
+
+class DeleteDecisionNode(DecisionPayload):
+    op: Literal["delete"]
+    id: DecisionNodeId
+
+
+DecisionNodeOperation = Annotated[
+    AddDecisionNode | EditDecisionNode | MoveDecisionNode | DeleteDecisionNode,
+    Field(discriminator="op"),
+]
+
+
+class DecisionTreeUpdate(DecisionPayload):
+    expected_version: DecisionVersion
+    nodes: list[DecisionNodeInput] | None = Field(default=None, min_length=1)
+    operations: list[DecisionNodeOperation] | None = Field(default=None, min_length=1)
+
+    @model_validator(mode="after")
+    def require_one_update(self) -> DecisionTreeUpdate:
+        if (self.nodes is None) == (self.operations is None):
+            raise ValueError("Provide either nodes or operations")
+        return self
+
+    def db_values(self) -> dict[str, Any]:
+        return {
+            "expected_version": self.expected_version,
+            "nodes": [node.model_dump() for node in self.nodes] if self.nodes else None,
+            "operations": [op.model_dump(exclude_unset=True) for op in self.operations]
+            if self.operations else None,
+        }
+
+
 TEXT_FIELDS = (
     "title",
     "question",

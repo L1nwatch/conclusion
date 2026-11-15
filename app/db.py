@@ -5,10 +5,12 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+from collections import defaultdict
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator, Mapping
+from uuid import uuid4
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -209,6 +211,21 @@ def init_db(connection: sqlite3.Connection) -> None:
             updated_at TEXT NOT NULL,
             deleted_at TEXT
         );
+
+        CREATE TABLE IF NOT EXISTS decisions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL CHECK(length(trim(title)) > 0),
+            description TEXT,
+            status TEXT NOT NULL CHECK(status IN ('Draft', 'Thinking', 'Decided')),
+            version INTEGER NOT NULL DEFAULT 1 CHECK(version >= 1),
+            root_id TEXT NOT NULL,
+            nodes_json TEXT NOT NULL CHECK(json_valid(nodes_json)),
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_decisions_updated_at
+        ON decisions(updated_at DESC, id DESC);
         """
     )
 
@@ -224,6 +241,251 @@ def init_db(connection: sqlite3.Connection) -> None:
     _migrate_decision_analysis_model_versions(connection)
     _seed_builtin_decision_models(connection)
     connection.commit()
+
+
+class DecisionNotFoundError(Exception):
+    """The requested Decision does not exist."""
+
+
+class InvalidDecisionTreeError(ValueError):
+    """A node operation would violate the tree's structure."""
+
+
+class DecisionVersionConflictError(Exception):
+    def __init__(self, current_version: int) -> None:
+        super().__init__("Decision was modified by another writer")
+        self.current_version = current_version
+
+
+DECISION_COLUMNS = "id, title, description, status, version, created_at, updated_at"
+
+
+def list_decisions(
+    connection: sqlite3.Connection,
+    *,
+    query: str | None,
+    status: str | None,
+    limit: int,
+    offset: int,
+) -> dict[str, Any]:
+    connection.create_function("casefold_title", 1, str.casefold, deterministic=True)
+    filters = "WHERE (? IS NULL OR instr(casefold_title(title), ?) > 0) AND (? IS NULL OR status = ?)"
+    search = query.strip().casefold() if query else None
+    params = (search, search, status, status)
+    with connection:
+        connection.execute("BEGIN")
+        count = connection.execute(f"SELECT count(*) FROM decisions {filters}", params).fetchone()[0]
+        rows = connection.execute(
+            f"""SELECT {DECISION_COLUMNS} FROM decisions {filters}
+            ORDER BY updated_at DESC, id DESC LIMIT ? OFFSET ?""",
+            (*params, limit, offset),
+        )
+        return {"count": count, "offset": offset, "items": [dict(row) for row in rows]}
+
+
+def get_decision(connection: sqlite3.Connection, decision_id: int) -> dict[str, Any]:
+    row = connection.execute("SELECT * FROM decisions WHERE id = ?", (decision_id,)).fetchone()
+    if row is None:
+        raise DecisionNotFoundError(f"Decision {decision_id} was not found")
+    record = dict(row)
+    record["nodes"] = [
+        {**node, "decision_id": decision_id} for node in json.loads(record.pop("nodes_json"))
+    ]
+    return record
+
+
+def _tree_index(
+    nodes: list[dict[str, Any]],
+) -> tuple[str, dict[str, dict[str, Any]], dict[str | None, list[str]]]:
+    by_id = {node["id"]: node for node in nodes}
+    if len(by_id) != len(nodes):
+        raise InvalidDecisionTreeError("Node IDs must be unique within the Decision")
+    children: dict[str | None, list[str]] = defaultdict(list)
+    for node in nodes:
+        parent_id = node["parent_id"]
+        if parent_id is not None and parent_id not in by_id:
+            raise InvalidDecisionTreeError(f"Parent node {parent_id} was not found in this Decision")
+        children[parent_id].append(node["id"])
+    if len(children[None]) != 1:
+        raise InvalidDecisionTreeError("A Decision must have exactly one root node")
+    for siblings in children.values():
+        siblings.sort(key=lambda node_id: by_id[node_id]["order"])
+        if any(by_id[node_id]["order"] != index for index, node_id in enumerate(siblings)):
+            raise InvalidDecisionTreeError("Sibling order must be consecutive and start at 0")
+    root_id = children[None][0]
+    pending = [root_id]
+    visited = 0
+    while pending:
+        visited += 1
+        pending.extend(children.get(pending.pop(), ()))
+    if visited != len(nodes):
+        raise InvalidDecisionTreeError("The tree contains a cycle disconnected from its root")
+    return root_id, by_id, children
+
+
+def _encode_decision_nodes(
+    nodes: list[dict[str, Any]], previous: list[dict[str, Any]], now: str
+) -> str:
+    old_nodes = {node["id"]: node for node in previous}
+    encoded = []
+    for node in nodes:
+        old = old_nodes.get(node["id"])
+        unchanged = old and all(old[key] == value for key, value in node.items())
+        encoded.append({
+            **node,
+            "created_at": old["created_at"] if old else now,
+            "updated_at": old["updated_at"] if unchanged else now,
+        })
+    return json.dumps(encoded, ensure_ascii=False, allow_nan=False)
+
+
+def create_decision(connection: sqlite3.Connection, values: dict[str, Any]) -> dict[str, Any]:
+    nodes = values["nodes"]
+    if nodes is None:
+        nodes = [{
+            "id": uuid4().hex, "parent_id": None, "text": values["title"],
+            "description": None, "type": "Topic", "order": 0,
+            "position_x": None, "position_y": None, "collapsed": False,
+        }]
+    root_id, _, _ = _tree_index(nodes)
+    now = utc_timestamp()
+    with connection:
+        connection.execute("BEGIN IMMEDIATE")
+        cursor = connection.execute(
+            """INSERT INTO decisions (title, description, status, root_id, nodes_json, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (values["title"], values["description"], values["status"], root_id,
+             _encode_decision_nodes(nodes, [], now), now, now),
+        )
+        return get_decision(connection, cursor.lastrowid)
+
+
+def _check_decision_version(current_version: int, expected_version: int) -> None:
+    if current_version != expected_version:
+        raise DecisionVersionConflictError(current_version)
+
+
+def update_decision(
+    connection: sqlite3.Connection, decision_id: int, expected_version: int, changes: dict[str, Any]
+) -> dict[str, Any]:
+    with connection:
+        connection.execute("BEGIN IMMEDIATE")
+        record = connection.execute(
+            f"SELECT {DECISION_COLUMNS} FROM decisions WHERE id = ?", (decision_id,)
+        ).fetchone()
+        if record is None:
+            raise DecisionNotFoundError(f"Decision {decision_id} was not found")
+        _check_decision_version(record["version"], expected_version)
+        merged = dict(record) | changes
+        connection.execute(
+            """UPDATE decisions SET title = ?, description = ?, status = ?,
+            version = version + 1, updated_at = ? WHERE id = ?""",
+            (merged["title"], merged["description"], merged["status"], utc_timestamp(), decision_id),
+        )
+        return get_decision(connection, decision_id)
+
+
+def _apply_tree_operations(
+    nodes: list[dict[str, Any]], operations: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    root_id, by_id, children = _tree_index(nodes)
+
+    def renumber(siblings: list[str]) -> None:
+        for order, node_id in enumerate(siblings):
+            by_id[node_id]["order"] = order
+
+    for operation in operations:
+        action, node_id = operation["op"], operation["id"]
+        node = by_id.get(node_id)
+        if action == "add":
+            if node is not None:
+                raise InvalidDecisionTreeError(f"Node {node_id} already exists")
+        elif node is None:
+            raise InvalidDecisionTreeError(f"Node {node_id} was not found in this Decision")
+        elif action == "update":
+            node.update(operation["changes"])
+            continue
+        elif node_id == root_id:
+            raise InvalidDecisionTreeError("The root node cannot be moved or deleted")
+
+        if node is not None:
+            siblings = children[node["parent_id"]]
+            siblings.remove(node_id)
+            renumber(siblings)
+        if action == "delete":
+            pending = [node_id]
+            while pending:
+                removed = pending.pop()
+                pending.extend(children.pop(removed, ()))
+                del by_id[removed]
+            continue
+
+        parent_id = operation["parent_id"]
+        if parent_id not in by_id:
+            raise InvalidDecisionTreeError(f"Parent node {parent_id} was not found in this Decision")
+        if action == "move":
+            ancestor = parent_id
+            while ancestor is not None:
+                if ancestor == node_id:
+                    raise InvalidDecisionTreeError(f"Moving node {node_id} here would create a cycle")
+                ancestor = by_id[ancestor]["parent_id"]
+            node["parent_id"] = parent_id
+        else:
+            by_id[node_id] = {
+                "id": node_id, "parent_id": parent_id, "text": operation["text"],
+                "description": operation.get("description"), "type": operation.get("type"),
+                "order": 0, "position_x": None, "position_y": None, "collapsed": False,
+            }
+        destination = children[parent_id]
+        order = operation.get("order")
+        if order is None:
+            order = len(destination)
+        if order > len(destination):
+            raise InvalidDecisionTreeError(f"Order {order} is out of range under parent {parent_id}")
+        destination.insert(order, node_id)
+        renumber(destination)
+    return list(by_id.values())
+
+
+def update_decision_tree(
+    connection: sqlite3.Connection, decision_id: int, values: dict[str, Any]
+) -> dict[str, Any]:
+    with connection:
+        connection.execute("BEGIN IMMEDIATE")
+        stored = connection.execute("SELECT * FROM decisions WHERE id = ?", (decision_id,)).fetchone()
+        if stored is None:
+            raise DecisionNotFoundError(f"Decision {decision_id} was not found")
+        _check_decision_version(stored["version"], values["expected_version"])
+        previous = json.loads(stored["nodes_json"])
+        nodes = values["nodes"]
+        if nodes is None:
+            nodes = [
+                {key: value for key, value in node.items() if key not in ("created_at", "updated_at")}
+                for node in previous
+            ]
+            nodes = _apply_tree_operations(nodes, values["operations"])
+        root_id, _, _ = _tree_index(nodes)
+        if root_id != stored["root_id"]:
+            raise InvalidDecisionTreeError("The root node ID must be preserved")
+        now = utc_timestamp()
+        connection.execute(
+            """UPDATE decisions SET nodes_json = ?, version = version + 1, updated_at = ?
+            WHERE id = ?""",
+            (_encode_decision_nodes(nodes, previous, now), now, decision_id),
+        )
+        return get_decision(connection, decision_id)
+
+
+def delete_decision(
+    connection: sqlite3.Connection, decision_id: int, expected_version: int
+) -> None:
+    with connection:
+        connection.execute("BEGIN IMMEDIATE")
+        record = connection.execute("SELECT version FROM decisions WHERE id = ?", (decision_id,)).fetchone()
+        if record is None:
+            raise DecisionNotFoundError(f"Decision {decision_id} was not found")
+        _check_decision_version(record["version"], expected_version)
+        connection.execute("DELETE FROM decisions WHERE id = ?", (decision_id,))
 
 
 def _migrate_decision_models_to_single_row(connection: sqlite3.Connection) -> None:
