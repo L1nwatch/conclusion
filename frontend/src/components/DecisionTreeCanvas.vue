@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { Handle, Position, VueFlow, useVueFlow } from '@vue-flow/core'
-import type { Edge, Node as FlowNode, NodeDragEvent } from '@vue-flow/core'
+import { BaseEdge, Handle, Position, VueFlow, useVueFlow } from '@vue-flow/core'
+import type { Edge, EdgeProps, Node as FlowNode, NodeDragEvent } from '@vue-flow/core'
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
-import { branch, containsNode, indexTree } from '../decisionTree'
+import { branch, branchConnector, containsNode, indexTree } from '../decisionTree'
 import type { DecisionNode, Point } from '../decisionTree'
 
 const props = defineProps<{
@@ -53,9 +53,23 @@ const edges = computed<Edge[]>(() => visible.value.flatMap(node => node.parentId
   id: node.id,
   source: node.parentId,
   target: node.id,
-  type: 'smoothstep',
+  type: 'branch',
   style: { stroke: '#81998e', strokeWidth: 1.6 },
 }]))
+
+function connectorPath({ source, sourceX, sourceY, targetX, targetY }: EdgeProps) {
+  const from = { x: sourceX, y: sourceY }
+  const to = { x: targetX, y: targetY }
+  const children = tree.value.children.get(source) ?? []
+  if (children.length <= 1 || targetX <= sourceX) return branchConnector(from, to)
+
+  let nearest = targetX
+  for (const child of children) {
+    const x = flow.findNode(child.id)?.computedPosition.x
+    if (x !== undefined && x > sourceX) nearest = Math.min(nearest, x)
+  }
+  return branchConnector(from, to, (sourceX + nearest) / 2)
+}
 
 function focusNode(id: string) {
   canvas.value?.querySelector<HTMLButtonElement>(
@@ -237,6 +251,9 @@ function dropBranch(event: DragEvent, id: string) {
       @node-drag-start="startPositionDrag" @node-drag="previewPosition" @node-drag-stop="finishPosition"
       @pane-click="emit('select', '')"
     >
+      <template #edge-branch="edge">
+        <BaseEdge :id="edge.id" :path="connectorPath(edge)" :style="edge.style" />
+      </template>
       <template #node-branch="{ id, data }">
         <article
           class="decision-node-card"

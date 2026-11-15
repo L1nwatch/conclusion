@@ -5,7 +5,7 @@ import { ElMessageBox } from 'element-plus'
 import { ApiError, getDecision, saveDecisionTree } from '../api'
 import DecisionTreeCanvas from '../components/DecisionTreeCanvas.vue'
 import {
-  branch, containsNode, fillMissingPositions, indexTree, layoutBranch,
+  branch, containsNode, indexTree, layoutBranch, restorePositions,
   MIN_NODE_HEIGHT, NODE_TYPES, withPositions,
 } from '../decisionTree'
 import type { DecisionNode, DecisionRecord, Point } from '../decisionTree'
@@ -72,7 +72,7 @@ async function load() {
   try {
     const record = await getDecision(Number(route.params.id))
     const nodes = unpack(record)
-    draft.value = withPositions(nodes, fillMissingPositions(indexTree(nodes), record.rootId, measure(nodes)))
+    draft.value = withPositions(nodes, restorePositions(indexTree(nodes), record.rootId, measure(nodes)))
     decision.value = record
     selectedId.value = record.rootId
     editing.value = undefined
@@ -158,7 +158,13 @@ function change(nodes: DecisionNode[]) {
 }
 
 function patchNode(id: string, changes: Partial<DecisionNode>) {
-  change(draft.value.map(node => node.id === id ? { ...node, ...changes } : node))
+  const current = tree.value.byId.get(id)
+  if (!current) return
+  const updated = { ...current, ...changes }
+  const nodes = draft.value.map(node => node.id === id ? updated : node)
+  const heightChanged = changes.text !== undefined &&
+    measure([current]).get(id) !== measure([updated]).get(id)
+  change(heightChanged ? arrangedNodes(nodes) : nodes)
 }
 
 function editText(id: string) {
@@ -193,8 +199,7 @@ function addNode(parentId: string, order?: number) {
   if (!decision.value) return
   const id = Array.from(crypto.getRandomValues(new Uint8Array(16)),
     byte => byte.toString(16).padStart(2, '0')).join('')
-  const siblings = tree.value.children.get(parentId) ?? []
-  const index = order ?? siblings.length
+  const index = order ?? tree.value.children.get(parentId)?.length ?? 0
   const nodes = [
     ...draft.value.map(node => {
       if (node.id === parentId) return { ...node, collapsed: false }
@@ -206,11 +211,7 @@ function addNode(parentId: string, order?: number) {
       collapsed: false, positionX: null, positionY: null,
     },
   ]
-  const indexed = indexTree(nodes)
-  const positions = index < siblings.length
-    ? layoutAtParent(indexed, parentId)
-    : fillMissingPositions(indexed, decision.value.rootId, measure(nodes))
-  change(withPositions(nodes, positions))
+  change(arrangedNodes(nodes))
   editText(id)
 }
 
@@ -231,11 +232,13 @@ function command(id: string, action: string) {
   }
 }
 
-function layoutAtParent(index: ReturnType<typeof indexTree>, parentId: string) {
-  const parent = index.byId.get(parentId)!
-  return layoutBranch(index, parentId, measure(branch(index, parentId)), {
-    x: parent.positionX ?? 0, y: parent.positionY ?? 0,
-  })
+function arrangedNodes(nodes: DecisionNode[]) {
+  if (!decision.value) return nodes
+  const index = indexTree(nodes)
+  const root = index.byId.get(decision.value.rootId)!
+  return withPositions(nodes, layoutBranch(index, root.id, measure(nodes), {
+    x: root.positionX ?? 0, y: root.positionY ?? 0,
+  }))
 }
 
 function moveNode(id: string, parentId: string, order: number) {
@@ -257,7 +260,7 @@ function moveNode(id: string, parentId: string, order: number) {
     }
     return current
   })
-  change(withPositions(nodes, layoutAtParent(indexTree(nodes), parentId)))
+  change(arrangedNodes(nodes))
   selectedId.value = id
 }
 
@@ -277,16 +280,16 @@ async function deleteBranch(node: DecisionNode) {
     return
   }
   selectedId.value = node.parentId
-  change(draft.value.filter(item => !removed.has(item.id)).map(item =>
+  const nodes = draft.value.filter(item => !removed.has(item.id)).map(item =>
     item.parentId === node.parentId && item.order > node.order
       ? { ...item, order: item.order - 1 }
       : item,
-  ))
+  )
+  change(arrangedNodes(nodes))
 }
 
 function arrange() {
-  if (!decision.value) return
-  change(withPositions(draft.value, layoutBranch(tree.value, decision.value.rootId, measure(draft.value))))
+  change(arrangedNodes(draft.value))
 }
 
 function position(positions: Map<string, Point>) {

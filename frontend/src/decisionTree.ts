@@ -83,15 +83,25 @@ export function layoutBranch(
   index: TreeIndex, rootId: string, heights: Map<string, number>, anchor: Point = { x: 0, y: 0 },
 ): Map<string, Point> {
   const ordered = branch(index, rootId)
-  const spans = new Map<string, number>()
-  const childSpans = new Map<string, number>()
+  const spans = new Map<string, { above: number; below: number; childOffsets: number[] }>()
   const height = (id: string) => heights.get(id) ?? MIN_NODE_HEIGHT
   for (let i = ordered.length - 1; i >= 0; i--) {
     const id = ordered[i]!.id
     const children = index.children.get(id) ?? []
-    const span = children.reduce((total, child) => total + spans.get(child.id)! + GAP, -GAP)
-    childSpans.set(id, Math.max(0, span))
-    spans.set(id, Math.max(height(id), span))
+    let bottom = -GAP
+    const centers = children.map(child => {
+      const span = spans.get(child.id)!
+      const center = bottom + GAP + span.above
+      bottom = center + span.below
+      return center
+    })
+    const midpoint = centers.length ? (centers[0]! + centers[centers.length - 1]!) / 2 : 0
+    const halfHeight = height(id) / 2
+    spans.set(id, {
+      above: Math.max(halfHeight, midpoint),
+      below: Math.max(halfHeight, bottom - midpoint),
+      childOffsets: centers.map(center => center - midpoint),
+    })
   }
 
   const positions = new Map<string, Point>()
@@ -99,53 +109,58 @@ export function layoutBranch(
   while (pending.length) {
     const { id, x, center } = pending.pop()!
     positions.set(id, { x, y: center - height(id) / 2 })
-    let top = center - childSpans.get(id)! / 2
-    for (const child of index.children.get(id) ?? []) {
-      const span = spans.get(child.id)!
-      pending.push({ id: child.id, x: x + COLUMN, center: top + span / 2 })
-      top += span + GAP
-    }
+    const offsets = spans.get(id)!.childOffsets
+    const children = index.children.get(id) ?? []
+    children.forEach((child, i) => {
+      pending.push({ id: child.id, x: x + COLUMN, center: center + offsets[i]! })
+    })
   }
   return positions
 }
 
-export function fillMissingPositions(
+export function branchConnector(source: Point, target: Point, junctionX?: number): string {
+  if (junctionX === undefined || source.y === target.y) {
+    return `M ${source.x},${source.y} L ${target.x},${target.y}`
+  }
+  return `M ${source.x},${source.y} H ${junctionX} V ${target.y} H ${target.x}`
+}
+
+export function restorePositions(
   index: TreeIndex, rootId: string, heights: Map<string, number>,
 ): Map<string, Point> {
-  const defaults = layoutBranch(index, rootId, heights)
   const ordered = branch(index, rootId)
-  if (ordered.every(node => node.positionX === null)) return defaults
+  const root = index.byId.get(rootId)!
+  const anchor = { x: root.positionX ?? 0, y: root.positionY ?? 0 }
+  if (ordered.some(node => node.positionX === null || node.positionY === null)) {
+    return layoutBranch(index, rootId, heights, anchor)
+  }
+  // Older column layouts could place a new child below a different branch.
+  // Custom column positions created by dragging are kept when reopening a tree.
+  const inColumns = ordered.every(node => node.parentId === null ||
+    Math.abs(node.positionX! - index.byId.get(node.parentId)!.positionX! - COLUMN) < 0.5)
+  if (inColumns && branchesInterleave(index, ordered, heights)) {
+    return layoutBranch(index, rootId, heights, anchor)
+  }
+  return new Map(ordered.map(node => [node.id, { x: node.positionX!, y: node.positionY! }]))
+}
 
-  const positions = new Map<string, Point>()
-  const occupied: Array<{ x: number; y: number; bottom: number }> = []
-  const height = (id: string) => heights.get(id) ?? MIN_NODE_HEIGHT
-  function reserve(id: string, point: Point) {
-    positions.set(id, point)
-    occupied.push({ ...point, bottom: point.y + height(id) })
-  }
-  for (const node of ordered) {
-    if (node.positionX !== null && node.positionY !== null) {
-      reserve(node.id, { x: node.positionX, y: node.positionY })
+function branchesInterleave(index: TreeIndex, ordered: DecisionNode[], heights: Map<string, number>) {
+  const bounds = new Map<string, { top: number; bottom: number }>()
+  for (let i = ordered.length - 1; i >= 0; i--) {
+    const node = ordered[i]!
+    let top = node.positionY!
+    let bottom = top + (heights.get(node.id) ?? MIN_NODE_HEIGHT)
+    let previousBottom = -Infinity
+    for (const child of index.children.get(node.id) ?? []) {
+      const childBounds = bounds.get(child.id)!
+      if (childBounds.top < previousBottom - 0.5) return true
+      previousBottom = childBounds.bottom
+      top = Math.min(top, childBounds.top)
+      bottom = Math.max(bottom, childBounds.bottom)
     }
+    bounds.set(node.id, { top, bottom })
   }
-  for (const node of ordered) {
-    if (positions.has(node.id)) continue
-    const point = { ...defaults.get(node.id)! }
-    if (node.parentId !== null) {
-      const parent = positions.get(node.parentId)!
-      point.x = parent.x + COLUMN
-      point.y += parent.y - defaults.get(node.parentId)!.y
-    }
-    const relevant = occupied.filter(other => Math.abs(point.x - other.x) < NODE_WIDTH + GAP)
-      .sort((a, b) => a.y - b.y)
-    for (const other of relevant) {
-      if (point.y + height(node.id) + GAP > other.y && point.y < other.bottom + GAP) {
-        point.y = other.bottom + GAP
-      }
-    }
-    reserve(node.id, point)
-  }
-  return positions
+  return false
 }
 
 export function withPositions(nodes: DecisionNode[], positions: Map<string, Point>): DecisionNode[] {
